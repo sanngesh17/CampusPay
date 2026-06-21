@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tuitionflow-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tuitionflow
+      POSTGRES_PASSWORD: tuitionflow
+      POSTGRES_DB: tuitionflow
+    ports:
+      - '5432:5432'
+    volumes:
+      - tuitionflow-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U tuitionflow -d tuitionflow']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  tuitionflow-pgdata:

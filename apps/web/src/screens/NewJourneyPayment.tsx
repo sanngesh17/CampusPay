@@ -1,0 +1,636 @@
+import { useMemo, useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
+import { Navigate, useNavigate } from 'react-router-dom';
+import { journeyApi } from '../api/journey';
+import { useAuth } from '../auth/AuthContext';
+import { Button, Card, ErrorNote, Field, Select, TextInput } from '../components/ui';
+
+const INSTITUTIONS = [
+  { name: 'University of Warwick', city: 'Coventry', short: 'W' },
+  { name: 'University of Oxford', city: 'Oxford', short: 'O' },
+  { name: 'University of Cambridge', city: 'Cambridge', short: 'C' },
+  { name: 'Imperial College London', city: 'London', short: 'I' },
+  { name: 'University College London', city: 'London', short: 'U' },
+] as const;
+
+const PROVIDERS = [
+  {
+    name: 'State Bank of India',
+    id: 'lender-sbi',
+    kind: 'BANK' as const,
+    mark: 'SBI',
+    color: 'bg-blue-700',
+  },
+  {
+    name: 'HDFC Bank',
+    id: 'lender-hdfc',
+    kind: 'BANK' as const,
+    mark: 'HDFC',
+    color: 'bg-red-600',
+  },
+  {
+    name: 'Kotak Mahindra Bank',
+    id: 'lender-kotak',
+    kind: 'BANK' as const,
+    mark: 'KOTAK',
+    color: 'bg-rose-700',
+  },
+  {
+    name: 'HDFC Credila',
+    id: 'lender-credila',
+    kind: 'NBFC' as const,
+    mark: 'CREDILA',
+    color: 'bg-indigo-600',
+  },
+  {
+    name: 'Avanse Financial Services',
+    id: 'lender-avanse',
+    kind: 'NBFC' as const,
+    mark: 'AVANSE',
+    color: 'bg-cyan-700',
+  },
+] as const;
+
+const STEP_LABELS = ['Institution', 'Payment', 'Funding', 'Provider', 'Details'];
+
+interface Fees {
+  tuition: string;
+  deposit: string;
+  accommodation: string;
+  other: string;
+}
+
+interface Details {
+  email: string;
+  firstName: string;
+  middleName: string;
+  familyName: string;
+  pinCode: string;
+  address1: string;
+  address2: string;
+  city: string;
+  state: string;
+  phone: string;
+  branch: string;
+  loanAccount: string;
+  sanctionReference: string;
+  payerName: string;
+  relationship: string;
+  pan: string;
+}
+
+export function NewJourneyPayment() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  const [step, setStep] = useState(1);
+  const [institution, setInstitution] = useState('');
+  const [fees, setFees] = useState<Fees>({
+    tuition: '',
+    deposit: '',
+    accommodation: '',
+    other: '',
+  });
+  const [providerId, setProviderId] = useState('');
+  const [evidence, setEvidence] = useState<File>();
+  const [accepted, setAccepted] = useState(false);
+  const [details, setDetails] = useState<Details>({
+    email: user?.email ?? '',
+    firstName: 'Aarav',
+    middleName: '',
+    familyName: 'Sharma',
+    pinCode: '560001',
+    address1: '12 Residency Road',
+    address2: '',
+    city: 'Bengaluru',
+    state: 'Karnataka',
+    phone: '9876543210',
+    branch: 'SBI RACPC Bengaluru',
+    loanAccount: 'EDU-2026-001234',
+    sanctionReference: 'SANCTION-2026-44',
+    payerName: 'Raj Sharma',
+    relationship: 'Parent',
+    pan: 'ABCDE1234F',
+  });
+
+  const selectedProvider = PROVIDERS.find((item) => item.id === providerId);
+  const totalMinor = useMemo(
+    () => Object.values(fees).reduce((sum, value) => sum + parseMinor(value), 0n),
+    [fees],
+  );
+  const sourceMinor = (totalMinor * 1_275_204n) / 10_000n;
+
+  const create = useMutation({
+    mutationFn: async () => {
+      if (!selectedProvider || !evidence) {
+        throw new Error('Select a provider and attach the loan sanction letter');
+      }
+
+      const created = await journeyApi.create({
+        fundingType: 'FULL_LOAN',
+        amountMinor: sourceMinor.toString(),
+        lenderAmountMinor: sourceMinor.toString(),
+        lenderId: selectedProvider.id,
+        lenderName: selectedProvider.name,
+        providerName: selectedProvider.name,
+        providerType: selectedProvider.kind,
+        branchName: details.branch,
+        loanAccountNumber: details.loanAccount,
+        sanctionReference: details.sanctionReference,
+        universityName: institution,
+        destinationCountry: 'United Kingdom',
+        targetCurrency: 'GBP',
+        targetAmountMinor: totalMinor.toString(),
+        feeBreakdown: {
+          tuitionAdvanceMinor: parseMinor(fees.tuition).toString(),
+          courseDepositMinor: parseMinor(fees.deposit).toString(),
+          accommodationMinor: parseMinor(fees.accommodation).toString(),
+          otherMinor: parseMinor(fees.other).toString(),
+        },
+        studentEmail: details.email,
+        firstName: details.firstName,
+        middleName: details.middleName,
+        familyName: details.familyName,
+        pinCode: details.pinCode,
+        addressLine1: details.address1,
+        addressLine2: details.address2,
+        city: details.city,
+        state: details.state,
+        phone: details.phone,
+        payerName: details.payerName,
+        payerRelationship: details.relationship,
+        payerPan: details.pan.toUpperCase(),
+      });
+
+      await journeyApi.upload(created.id, evidence);
+      await journeyApi.submit(created.id);
+      return created.id;
+    },
+    onSuccess: (id) => navigate(`/payments/${id}`),
+  });
+
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role !== 'STUDENT') return <Navigate to="/dashboard" replace />;
+
+  const canContinue =
+    step === 1
+      ? institution !== ''
+      : step === 2
+        ? totalMinor > 0n
+        : step === 3
+          ? true
+          : step === 4
+            ? providerId !== ''
+            : requiredDetails(details) && !!evidence && accepted;
+
+  return (
+    <div className="space-y-7">
+      <WizardHeader step={step} />
+      <div className="grid gap-7 lg:grid-cols-[1fr_300px]">
+        <Card className="overflow-hidden">
+          <div className="p-6 md:p-9">
+            {step === 1 ? <InstitutionStep value={institution} onChange={setInstitution} /> : null}
+            {step === 2 ? <PaymentStep fees={fees} setFees={setFees} total={totalMinor} /> : null}
+            {step === 3 ? <FundingStep /> : null}
+            {step === 4 ? <ProviderStep value={providerId} onChange={setProviderId} /> : null}
+            {step === 5 ? (
+              <DetailsStep
+                value={details}
+                onChange={setDetails}
+                evidence={evidence}
+                setEvidence={setEvidence}
+                accepted={accepted}
+                setAccepted={setAccepted}
+              />
+            ) : null}
+
+            <ErrorNote message={create.error ? (create.error as Error).message : undefined} />
+
+            <div className="mt-8 flex items-center justify-between border-t border-slate-100 pt-6">
+              <Button
+                variant="ghost"
+                onClick={() => setStep((current) => Math.max(1, current - 1))}
+                disabled={step === 1}
+              >
+                Back
+              </Button>
+
+              {step < 5 ? (
+                <Button
+                  data-testid="wizard-next"
+                  onClick={() => setStep((current) => current + 1)}
+                  disabled={!canContinue}
+                >
+                  Continue
+                </Button>
+              ) : (
+                <Button
+                  data-testid="wizard-submit"
+                  onClick={() => create.mutate()}
+                  disabled={!canContinue || create.isPending}
+                >
+                  {create.isPending ? 'Generating request…' : 'Generate payment request'}
+                </Button>
+              )}
+            </div>
+          </div>
+        </Card>
+
+        <PaymentSummary
+          institution={institution}
+          totalMinor={totalMinor}
+          sourceMinor={sourceMinor}
+          provider={selectedProvider?.name}
+        />
+      </div>
+    </div>
+  );
+}
+
+function WizardHeader({ step }: { step: number }) {
+  return (
+    <div>
+      <div className="text-xs font-bold uppercase tracking-[0.2em] text-brand-600">
+        Make a payment
+      </div>
+      <div className="mt-4 grid grid-cols-5 gap-2">
+        {STEP_LABELS.map((label, index) => (
+          <div key={label}>
+            <div
+              className={`h-1.5 rounded-full ${index + 1 <= step ? 'bg-brand-600' : 'bg-slate-200'}`}
+            />
+            <div
+              className={`mt-2 hidden text-xs md:block ${index + 1 === step ? 'font-semibold text-slate-800' : 'text-slate-400'}`}
+            >
+              {index + 1}. {label}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SectionTitle({ eyebrow, title, copy }: { eyebrow: string; title: string; copy: string }) {
+  return (
+    <div className="mb-7">
+      <div className="text-xs font-semibold uppercase tracking-wider text-brand-600">{eyebrow}</div>
+      <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900 md:text-3xl">
+        {title}
+      </h1>
+      <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{copy}</p>
+    </div>
+  );
+}
+
+function InstitutionStep({ value, onChange }: { value: string; onChange(value: string): void }) {
+  return (
+    <>
+      <SectionTitle
+        eyebrow="Destination"
+        title="Where are you paying?"
+        copy="Choose the country and the institution that should receive your tuition payment."
+      />
+      <Field label="Institution country">
+        <Select value="United Kingdom" disabled>
+          <option>United Kingdom</option>
+        </Select>
+      </Field>
+      <div className="mt-6 grid gap-3 sm:grid-cols-2">
+        {INSTITUTIONS.map((item) => (
+          <button
+            key={item.name}
+            data-testid={`institution-${item.short.toLowerCase()}`}
+            onClick={() => onChange(item.name)}
+            className={`flex items-center gap-4 rounded-xl border p-4 text-left transition ${value === item.name ? 'border-brand-500 bg-brand-50 ring-2 ring-brand-100' : 'border-slate-200 hover:border-brand-200 hover:bg-slate-50'}`}
+          >
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-sm font-bold text-white">
+              {item.short}
+            </span>
+            <span>
+              <span className="block text-sm font-semibold text-slate-800">{item.name}</span>
+              <span className="mt-1 block text-xs text-slate-400">{item.city}, United Kingdom</span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function PaymentStep({
+  fees,
+  setFees,
+  total,
+}: {
+  fees: Fees;
+  setFees(value: Fees): void;
+  total: bigint;
+}) {
+  const fields: Array<[keyof Fees, string]> = [
+    ['tuition', 'Tuition fee - payment in advance'],
+    ['deposit', 'Tuition fee - course deposit'],
+    ['accommodation', 'Accommodation fee'],
+    ['other', 'Other university fees'],
+  ];
+
+  return (
+    <>
+      <SectionTitle
+        eyebrow="Payment details"
+        title="What would you like to pay?"
+        copy="Enter one or more amounts in British pounds. Leave fields blank when they do not apply."
+      />
+      <div className="space-y-3">
+        {fields.map(([key, label]) => (
+          <label
+            key={key}
+            className="flex items-center rounded-xl border border-slate-200 bg-white focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100"
+          >
+            <span className="border-r border-slate-200 px-4 py-4 font-semibold text-slate-500">
+              £
+            </span>
+            <span className="flex-1 px-4">
+              <span className="block text-xs text-slate-500">{label}</span>
+              <input
+                className="mt-1 w-full border-0 bg-transparent text-lg font-semibold outline-none"
+                inputMode="decimal"
+                value={fees[key]}
+                onChange={(event) =>
+                  setFees({ ...fees, [key]: event.target.value.replace(/[^0-9.]/g, '') })
+                }
+                placeholder="0.00"
+              />
+            </span>
+          </label>
+        ))}
+      </div>
+
+      <div className="mt-6 flex items-center justify-between rounded-2xl bg-slate-900 px-6 py-5 text-white">
+        <span className="text-sm text-slate-300">University receives</span>
+        <span className="text-2xl font-semibold">{formatCurrency(total, 'GBP')}</span>
+      </div>
+
+      <Field label="The payment will come from">
+        <Select value="India" disabled>
+          <option>India</option>
+        </Select>
+      </Field>
+    </>
+  );
+}
+
+function FundingStep() {
+  return (
+    <>
+      <SectionTitle
+        eyebrow="Source of funds"
+        title="How is this payment funded?"
+        copy="The first release supports disbursement from an existing, fully sanctioned education loan."
+      />
+      <div className="rounded-2xl border-2 border-brand-500 bg-brand-50 p-7">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-600 text-xl text-white">
+          ₹
+        </div>
+        <h2 className="mt-5 text-xl font-semibold">Full loan financing</h2>
+        <p className="mt-2 max-w-md text-sm leading-6 text-slate-600">
+          Your approved loan provider funds the full payment. TuitionFlow does not originate,
+          underwrite, or sanction the loan.
+        </p>
+        <div className="mt-5 inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+          Available
+        </div>
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-3 opacity-50">
+        {['Partial loan + savings', 'Self-funded', 'Cards / other'].map((label) => (
+          <div
+            key={label}
+            className="rounded-xl border border-slate-200 p-4 text-center text-xs text-slate-500"
+          >
+            {label}
+            <div className="mt-2 font-semibold">Coming later</div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function ProviderStep({ value, onChange }: { value: string; onChange(value: string): void }) {
+  return (
+    <>
+      <SectionTitle
+        eyebrow="Loan provider"
+        title="Who sanctioned your education loan?"
+        copy="Select the bank or NBFC that will review and release the approved disbursement."
+      />
+      <div className="grid gap-4 sm:grid-cols-2">
+        {PROVIDERS.map((item) => (
+          <button
+            key={item.id}
+            data-testid={`provider-${item.id}`}
+            onClick={() => onChange(item.id)}
+            className={`rounded-2xl border p-5 text-left transition ${value === item.id ? 'border-brand-500 bg-brand-50 ring-2 ring-brand-100' : 'border-slate-200 hover:border-brand-200'}`}
+          >
+            <span
+              className={`inline-flex rounded-lg px-3 py-2 text-xs font-black tracking-wide text-white ${item.color}`}
+            >
+              {item.mark}
+            </span>
+            <span className="mt-5 block font-semibold text-slate-800">{item.name}</span>
+            <span className="mt-1 block text-xs text-slate-400">
+              {item.kind === 'BANK' ? 'Indian bank' : 'Education finance NBFC'}
+            </span>
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function DetailsStep({
+  value,
+  onChange,
+  evidence,
+  setEvidence,
+  accepted,
+  setAccepted,
+}: {
+  value: Details;
+  onChange(value: Details): void;
+  evidence?: File;
+  setEvidence(file?: File): void;
+  accepted: boolean;
+  setAccepted(value: boolean): void;
+}) {
+  const input = (key: keyof Details, label: string, required = true) => (
+    <Field label={`${label}${required ? ' *' : ''}`}>
+      <TextInput
+        value={value[key]}
+        onChange={(event) => onChange({ ...value, [key]: event.target.value })}
+      />
+    </Field>
+  );
+
+  return (
+    <>
+      <SectionTitle
+        eyebrow="Student and loan details"
+        title="Tell us who is making this payment"
+        copy="Student loan details."
+      />
+
+      <div className="grid gap-4 md:grid-cols-2">
+        {input('email', 'Email')}
+        {input('firstName', 'First name')}
+        {input('middleName', 'Middle name', false)}
+        {input('familyName', 'Family name')}
+        {input('pinCode', 'PIN code')}
+        {input('phone', 'Phone number')}
+        {input('address1', 'Address line 1')}
+        {input('address2', 'Address line 2', false)}
+        {input('city', 'City')}
+        {input('state', 'State', false)}
+      </div>
+
+      <div className="my-7 border-t border-slate-100" />
+
+      <h2 className="mb-4 font-semibold">Approved loan</h2>
+      <div className="grid gap-4 md:grid-cols-2">
+        {input('branch', 'RACPC / loan centre')}
+        {input('loanAccount', 'Loan account number')}
+        {input('sanctionReference', 'Sanction reference')}
+        {input('payerName', 'Payer name')}
+        <Field label="Payer relationship *">
+          <Select
+            value={value.relationship}
+            onChange={(event) => onChange({ ...value, relationship: event.target.value })}
+          >
+            <option>Parent</option>
+            <option>Self</option>
+            <option>Guardian</option>
+          </Select>
+        </Field>
+        {input('pan', 'PAN of payer')}
+      </div>
+
+      <label className="mt-6 block rounded-xl border-2 border-dashed border-slate-200 p-5 text-center text-sm text-slate-500">
+        {evidence ? (
+          <span className="font-semibold text-emerald-700">Attached: {evidence.name}</span>
+        ) : (
+          'Attach the loan sanction letter (PDF, JPG or PNG)'
+        )}
+        <input
+          type="file"
+          accept=".pdf,.jpg,.jpeg,.png"
+          className="mt-3 block w-full text-xs"
+          onChange={(event) => setEvidence(event.target.files?.[0])}
+        />
+      </label>
+
+      <button
+        type="button"
+        className="mt-3 text-sm font-semibold text-brand-700 underline decoration-brand-200 underline-offset-4"
+        onClick={() =>
+          setEvidence(
+            new File(
+              ['%PDF-1.4\nSynthetic TuitionFlow sanction evidence\n%%EOF'],
+              'synthetic-sanction-letter.pdf',
+              { type: 'application/pdf' },
+            ),
+          )
+        }
+      >
+        Use synthetic demo evidence
+      </button>
+
+      <label className="mt-5 flex items-start gap-3 text-sm text-slate-600">
+        <input
+          type="checkbox"
+          checked={accepted}
+          onChange={(event) => setAccepted(event.target.checked)}
+          className="mt-1 h-4 w-4 accent-brand-600"
+        />
+        <span>
+          I confirm this is an existing sanctioned education loan and consent to the stated
+          compliance checks and document processing.
+        </span>
+      </label>
+    </>
+  );
+}
+
+function PaymentSummary({
+  institution,
+  totalMinor,
+  sourceMinor,
+  provider,
+}: {
+  institution: string;
+  totalMinor: bigint;
+  sourceMinor: bigint;
+  provider?: string;
+}) {
+  return (
+    <Card className="h-fit overflow-hidden lg:sticky lg:top-24">
+      <div className="bg-slate-900 p-5 text-white">
+        <div className="text-xs uppercase tracking-widest text-brand-200">Payment summary</div>
+        <div className="mt-3 text-lg font-semibold">{institution || 'Select an institution'}</div>
+      </div>
+
+      <div className="space-y-4 p-5 text-sm">
+        <SummaryRow label="University receives" value={formatCurrency(totalMinor, 'GBP')} />
+        <SummaryRow label="Indicative INR" value={formatCurrency(sourceMinor, 'INR')} />
+        <SummaryRow label="Origin" value="India" />
+        <SummaryRow label="Funding" value="Full education loan" />
+        <SummaryRow label="Provider" value={provider ?? 'Not selected'} />
+        <div className="rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-800">
+          Final FX, tax and eligibility are supplied by the authorised partner before payout.
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <span className="text-slate-400">{label}</span>
+      <span className="text-right font-medium text-slate-700">{value}</span>
+    </div>
+  );
+}
+
+function parseMinor(value: string): bigint {
+  const normalized = value.trim();
+  if (!normalized) return 0n;
+  const [whole = '0', fraction = ''] = normalized.split('.');
+  return BigInt(whole || '0') * 100n + BigInt((fraction + '00').slice(0, 2));
+}
+
+function formatCurrency(minor: bigint, currency: 'GBP' | 'INR'): string {
+  const symbol = currency === 'GBP' ? '£' : '₹';
+  return `${symbol}${(minor / 100n).toLocaleString('en-IN')}.${(minor % 100n)
+    .toString()
+    .padStart(2, '0')}`;
+}
+
+function requiredDetails(value: Details): boolean {
+  return (
+    [
+      value.email,
+      value.firstName,
+      value.familyName,
+      value.pinCode,
+      value.address1,
+      value.city,
+      value.phone,
+      value.branch,
+      value.loanAccount,
+      value.sanctionReference,
+      value.payerName,
+      value.relationship,
+      value.pan,
+    ].every((field) => field.trim() !== '') && /^[A-Za-z]{5}[0-9]{4}[A-Za-z]$/.test(value.pan)
+  );
+}

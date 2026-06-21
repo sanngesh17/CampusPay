@@ -1,0 +1,143 @@
+// Prisma schema mirroring packages/domain. Money is stored as BigInt minor units + a currency
+// string — never a float. Sensitive PII (pan/passport/bankAccount) is field-level encrypted at the
+// application layer before it reaches these columns (ciphertext only).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Student {
+  id                String   @id @default(uuid())
+  fullName          String
+  email             String   @unique
+  countryOfStudy    String
+  panCipher         String?
+  passportCipher    String?
+  bankAccountCipher String?
+  keyRef            String?
+  createdAt         DateTime @default(now())
+  cases             Case[]
+}
+
+model Lender {
+  id    String @id @default(uuid())
+  name  String
+  type  String // BANK | NBFC
+  cases Case[]
+}
+
+model University {
+  id             String @id @default(uuid())
+  name           String
+  country        String
+  currency       String
+  referenceRule  String
+  beneficiaryRef String
+  cases          Case[]
+}
+
+model Case {
+  id            String   @id @default(uuid())
+  status        String
+  mode          String // INTEGRATED | DIRECT
+  funding       String // LOAN | SELF
+  amountMinor   BigInt
+  currency      String
+  rail          String?
+  failureReason String?
+  studentId     String
+  lenderId      String
+  universityId  String
+  student       Student       @relation(fields: [studentId], references: [id])
+  lender        Lender        @relation(fields: [lenderId], references: [id])
+  university    University    @relation(fields: [universityId], references: [id])
+  quote         Quote?
+  payment       Payment?
+  attestations  Attestation[]
+  auditLogs     AuditLog[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Quote {
+  id                String   @id @default(uuid())
+  caseId            String   @unique
+  case              Case     @relation(fields: [caseId], references: [id])
+  fxRate            String
+  principalMinor    BigInt
+  feesMinor         BigInt
+  tcsMinor          BigInt
+  finalPayableMinor BigInt
+  currency          String
+  expiresAt         DateTime
+  createdAt         DateTime @default(now())
+}
+
+model Payment {
+  id          String   @id @default(uuid())
+  caseId      String   @unique
+  case        Case     @relation(fields: [caseId], references: [id])
+  railId      String
+  paymentId   String
+  status      String
+  receiptHash String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Attestation {
+  id        String   @id @default(uuid())
+  caseId    String
+  case      Case     @relation(fields: [caseId], references: [id])
+  milestone String
+  sha256    String
+  txHash    String?
+  createdAt DateTime @default(now())
+}
+
+model Credential {
+  id             String   @id @default(uuid())
+  subject        String
+  issuer         String
+  credentialType String
+  status         String
+  txHash         String?
+  createdAt      DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  caseId    String?
+  case      Case?    @relation(fields: [caseId], references: [id])
+  event     String
+  detail    String?
+  createdAt DateTime @default(now())
+}
+
+model ConsentRecord {
+  id        String   @id @default(uuid())
+  studentId String
+  scope     String
+  grantedAt DateTime @default(now())
+}
+
+model IdempotencyKey {
+  key          String   @id
+  endpoint     String
+  responseJson String
+  createdAt    DateTime @default(now())
+}
+
+// Encrypted/sanitized aggregate snapshot for the compliance-ready workflow. The domain aggregate
+// still owns invariants; this table provides durable PostgreSQL storage without leaking PII fields.
+model JourneySnapshot {
+  id         String   @id
+  recordJson String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}

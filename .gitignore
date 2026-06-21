@@ -1,0 +1,25 @@
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# env / secrets
+.env
+.env.local
+.env.*.local
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# editors / os
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# prisma local artifacts
+**/*.db
+.data/

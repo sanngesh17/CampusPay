@@ -1,0 +1,23 @@
+{
+  "_comment": "Tax Collected at Source (India LRS, education remittances). Config-driven — rates update without code changes. MVP rule: loan-funded education = 0% TCS.",
+  "currency": "INR",
+  "thresholdMinor": 70000000,
+  "_thresholdNote": "₹7,00,000 in paise — TCS applies only above this within a financial year.",
+  "purposes": {
+    "EDUCATION_LOAN": {
+      "ratePct": 0,
+      "appliesAboveThresholdOnly": true,
+      "note": "Education funded by a loan from a notified financial institution — 0% TCS (MVP)."
+    },
+    "EDUCATION_SELF": {
+      "ratePct": 5,
+      "appliesAboveThresholdOnly": true,
+      "note": "Self-funded education — 5% above threshold."
+    },
+    "OTHER": {
+      "ratePct": 20,
+      "appliesAboveThresholdOnly": true,
+      "note": "Other LRS purposes — 20% above threshold."
+    }
+  }
+}

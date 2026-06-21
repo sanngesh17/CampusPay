@@ -1,0 +1,49 @@
+{
+  "name": "tuitionflow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cross-border tuition payment platform — XRPL Testnet attestations, swappable rails (MVP: MockRailAdapter, no real money).",
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "demo": "pnpm --filter @tuitionflow/api build && concurrently -k -n api,web -c blue,green \"pnpm --filter @tuitionflow/api start\" \"pnpm --filter @tuitionflow/web dev\"",
+    "db:up": "docker compose -f infra/docker-compose.yml up -d --wait postgres",
+    "db:migrate": "cross-env DATABASE_URL=postgresql://tuitionflow:tuitionflow@localhost:5432/tuitionflow?schema=public pnpm --filter @tuitionflow/api exec prisma migrate deploy",
+    "db:backup-restore-smoke": "powershell -NoProfile -ExecutionPolicy Bypass -File infra/backup-restore-smoke.ps1",
+    "demo:full": "pnpm db:up && pnpm db:migrate && cross-env PERSISTENCE=prisma DATABASE_URL=postgresql://tuitionflow:tuitionflow@localhost:5432/tuitionflow?schema=public pnpm demo",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.16.0",
+    "@types/jest": "^29.5.12",
+    "@types/node": "^22.10.0",
+    "concurrently": "^9.1.0",
+    "cross-env": "^10.1.0",
+    "eslint": "^9.16.0",
+    "eslint-config-prettier": "^9.1.0",
+    "husky": "^9.1.7",
+    "jest": "^29.7.0",
+    "lint-staged": "^15.2.10",
+    "prettier": "^3.4.2",
+    "ts-jest": "^29.2.5",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
+  }
+}

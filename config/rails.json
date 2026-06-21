@@ -1,0 +1,22 @@
+{
+  "_comment": "Rail routing config — caps, fees, FX, corridors. The ₹25L cap is enforced in RailAdapter.supports(); fees/FX feed the quote-builder.",
+  "capInrMinor": 2500000000,
+  "_capNote": "₹25,00,000 in paise — Rail A only handles amounts at or below this.",
+  "fees": {
+    "A": { "flatMinor": 50000, "bps": 25 },
+    "B": { "flatMinor": 150000, "bps": 35 },
+    "C": { "flatMinor": 0, "bps": 20 }
+  },
+  "fx": {
+    "INR_GBP": 0.0095,
+    "INR_USD": 0.012
+  },
+  "corridors": {
+    "A": ["GBP", "USD"],
+    "B": ["GBP", "USD"],
+    "C": ["USD"]
+  },
+  "featureFlags": {
+    "rippleRail": false
+  }
+}
