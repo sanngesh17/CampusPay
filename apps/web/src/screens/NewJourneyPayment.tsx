@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { journeyApi } from '../api/journey';
@@ -131,6 +131,7 @@ export function NewJourneyPayment() {
     [fees],
   );
   const sourceMinor = (totalMinor * 1_275_204n) / 10_000n;
+  const showSummary = totalMinor > 0n;
 
   const create = useMutation({
     mutationFn: async () => {
@@ -202,8 +203,8 @@ export function NewJourneyPayment() {
   return (
     <>
       <WizardHeader step={step} />
-      <div className="grid gap-7 lg:grid-cols-[1fr_300px]">
-        <Card className="overflow-hidden">
+      <div className={`grid gap-5 ${showSummary ? 'lg:grid-cols-[1fr_300px]' : ''}`}>
+        <Card className="overflow-visible">
           <div className="p-6 md:p-9">
             {step === 1 ? (
               <UniversityStep
@@ -258,13 +259,15 @@ export function NewJourneyPayment() {
           </div>
         </Card>
 
-        <PaymentSummary
-          institution={universityName}
-          semesterLabel={semesterLabel}
-          totalMinor={totalMinor}
-          sourceMinor={sourceMinor}
-          provider={selectedProvider?.name}
-        />
+        {showSummary ? (
+          <PaymentSummary
+            institution={universityName}
+            semesterLabel={semesterLabel}
+            totalMinor={totalMinor}
+            sourceMinor={sourceMinor}
+            provider={selectedProvider?.name}
+          />
+        ) : null}
       </div>
     </>
   );
@@ -288,7 +291,7 @@ function WizardHeader({ step }: { step: number }) {
             />
             <div
               className={`mt-2 hidden font-mono text-[11px] md:block ${
-                index + 1 === step ? 'font-semibold text-[var(--ink)]' : 'text-[var(--ink-faint)]'
+                index + 1 === step ? 'font-semibold text-[var(--ink)]' : 'text-[var(--ink-soft)]'
               }`}
             >
               {index + 1}. {label}
@@ -321,6 +324,7 @@ function UniversityStep({
   semesterLabel: string;
   setSemesterLabel(value: (typeof SEMESTERS)[number]): void;
 }) {
+  const [semesterOpen, setSemesterOpen] = useState(false);
   return (
     <>
       <SectionTitle
@@ -333,19 +337,57 @@ function UniversityStep({
           <option>United Kingdom</option>
         </Select>
       </Field>
-      <div className="my-5 rounded-xl border border-[var(--border)] bg-[rgba(32,32,32,0.015)] p-4">
-        <div className="mono-label">Institution</div>
-        <div className="mt-1 text-lg font-semibold text-[var(--ink)]">{universityName}</div>
+      <div className="my-5 rounded-xl bg-[rgba(32,32,32,0.025)] p-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="mono-label">Institution</div>
+            <div className="mt-1 text-lg font-semibold text-[var(--ink)]">{universityName}</div>
+          </div>
+          <span className="status-badge status-warning">Locked</span>
+        </div>
       </div>
       <Field label="Semester">
-        <Select
-          value={semesterLabel}
-          onChange={(event) => setSemesterLabel(event.target.value as (typeof SEMESTERS)[number])}
-        >
-          {SEMESTERS.map((semester) => (
-            <option key={semester}>{semester}</option>
-          ))}
-        </Select>
+        <div className="relative">
+          <button
+            type="button"
+            aria-haspopup="listbox"
+            aria-expanded={semesterOpen}
+            className="tf-input flex items-center justify-between text-left"
+            onClick={() => setSemesterOpen((current) => !current)}
+          >
+            <span>{semesterLabel}</span>
+            <span className="font-mono text-[11px] text-[var(--ink-faint)]">⌄</span>
+          </button>
+          {semesterOpen ? (
+            <div
+              role="listbox"
+              className="absolute left-0 right-0 top-[calc(100%+8px)] z-[100] overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 shadow-[0_14px_32px_rgba(32,32,32,0.10)]"
+            >
+              {SEMESTERS.map((semester) => (
+                <button
+                  key={semester}
+                  type="button"
+                  role="option"
+                  aria-selected={semester === semesterLabel}
+                  className={`flex w-full items-center justify-between rounded-lg px-4 py-3 text-left text-sm font-semibold transition ${
+                    semester === semesterLabel
+                      ? 'bg-[var(--accent-bg)] text-[var(--accent)]'
+                      : 'text-[var(--ink)] hover:bg-[rgba(32,32,32,0.03)]'
+                  }`}
+                  onClick={() => {
+                    setSemesterLabel(semester);
+                    setSemesterOpen(false);
+                  }}
+                >
+                  <span>{semester}</span>
+                  {semester === semesterLabel ? (
+                    <span className="font-mono text-[11px]">selected</span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
       </Field>
     </>
   );
@@ -379,7 +421,7 @@ function PaymentStep({
             <span className="flex-1 px-4">
               <span className="block text-xs text-[var(--ink-soft)]">{label}</span>
               <input
-                className="mt-1 w-full border-0 bg-transparent text-lg font-semibold text-[var(--ink)] outline-none"
+                className="mt-1 w-full border-0 bg-transparent text-lg font-semibold text-[var(--ink)] outline-none placeholder:text-[var(--ink-faint)] placeholder:font-medium"
                 inputMode="decimal"
                 value={fees[key]}
                 onChange={(event) =>
@@ -425,14 +467,14 @@ function FundingStep() {
         </p>
         <div className="status-badge status-success mt-5">Available</div>
       </div>
-      <div className="mt-4 grid grid-cols-3 gap-3 opacity-50">
+      <div className="mt-4 grid grid-cols-3 gap-3">
         {['Partial loan + savings', 'Self-funded', 'Cards / other'].map((label) => (
           <div
             key={label}
-            className="rounded-xl border border-[var(--border)] p-4 text-center text-xs text-[var(--ink-soft)]"
+            className="rounded-xl border border-dashed border-[var(--border)] bg-[rgba(32,32,32,0.012)] p-4 text-center text-xs text-[var(--ink-faint)]"
           >
             {label}
-            <div className="mt-2 font-semibold">Coming later</div>
+            <div className="mt-2 font-semibold text-[var(--ink-faint)]">Coming later</div>
           </div>
         ))}
       </div>
@@ -455,7 +497,7 @@ function ProviderStep({ value, onChange }: { value: string; onChange(value: stri
             key={item.id}
             data-testid={`provider-${item.id}`}
             onClick={() => onChange(item.id)}
-            className={`rounded-2xl border p-5 text-left transition ${
+            className={`flex h-full min-h-[150px] flex-col rounded-2xl border p-5 text-left transition ${
               value === item.id
                 ? 'border-[var(--accent)] bg-[var(--accent-bg)]'
                 : 'border-[var(--border)] bg-[var(--surface)] hover:border-[var(--accent)]'
@@ -506,74 +548,108 @@ function DetailsStep({
       <SectionTitle
         eyebrow="Student and loan details"
         title="Tell us who is making this payment"
-        copy="Student loan details."
+        copy="Step 5 of 5. Confirm the student, loan, payer, and evidence details."
       />
 
-      <div className="grid gap-4 md:grid-cols-2">
-        {input('email', 'Email')}
-        {input('firstName', 'First name')}
-        {input('middleName', 'Middle name', false)}
-        {input('familyName', 'Family name')}
-        {input('pinCode', 'PIN code')}
-        {input('phone', 'Phone number')}
-        {input('address1', 'Address line 1')}
-        {input('address2', 'Address line 2', false)}
-        {input('city', 'City')}
-        {input('state', 'State', false)}
+      <div className="space-y-8">
+        <FormSection title="Your details">
+          {input('email', 'Email')}
+          {input('firstName', 'First name')}
+          {input('middleName', 'Middle name', false)}
+          {input('familyName', 'Family name')}
+          {input('phone', 'Phone number')}
+        </FormSection>
+
+        <FormSection title="Address">
+          {input('pinCode', 'PIN code')}
+          {input('address1', 'Address line 1')}
+          {input('address2', 'Address line 2', false)}
+          {input('city', 'City')}
+          {input('state', 'State', false)}
+        </FormSection>
+
+        <FormSection title="Approved loan">
+          {input('branch', 'RACPC / loan centre')}
+          {input('loanAccount', 'Loan account number')}
+          {input('sanctionReference', 'Sanction reference')}
+        </FormSection>
+
+        <FormSection title="Payer details">
+          {input('payerName', 'Payer name')}
+          <Field label="Payer relationship *">
+            <Select
+              value={value.relationship}
+              onChange={(event) => onChange({ ...value, relationship: event.target.value })}
+            >
+              <option>Parent</option>
+              <option>Self</option>
+              <option>Guardian</option>
+            </Select>
+          </Field>
+          {input('pan', 'PAN of payer')}
+        </FormSection>
+
+        <section>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="font-semibold text-[var(--ink)]">Evidence</h2>
+              <p className="mt-1 text-sm text-[var(--ink-soft)]">
+                Attach the loan sanction letter.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn-row-action"
+              onClick={() =>
+                setEvidence(
+                  new File(
+                    ['%PDF-1.4\nSynthetic TuitionFlow sanction evidence\n%%EOF'],
+                    'synthetic-sanction-letter.pdf',
+                    { type: 'application/pdf' },
+                  ),
+                )
+              }
+            >
+              Use sample evidence
+            </button>
+          </div>
+
+          {evidence ? (
+            <div className="flex flex-col gap-3 rounded-xl border border-[var(--border)] bg-[rgba(5,150,105,0.04)] p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-sm font-semibold text-[var(--success)]">Attached</div>
+                <div className="mt-1 break-all text-sm text-[var(--ink)]">{evidence.name}</div>
+              </div>
+              <div className="row-actions">
+                <label className="btn-row-action cursor-pointer">
+                  Replace
+                  <input
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    className="hidden"
+                    onChange={(event) => setEvidence(event.target.files?.[0])}
+                  />
+                </label>
+                <button type="button" className="btn-row-action" onClick={() => setEvidence()}>
+                  Remove
+                </button>
+              </div>
+            </div>
+          ) : (
+            <label className="block rounded-xl border-2 border-dashed border-[var(--border)] p-5 text-center text-sm text-[var(--ink-soft)]">
+              Attach PDF, JPG or PNG
+              <input
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png"
+                className="mt-3 block w-full text-xs"
+                onChange={(event) => setEvidence(event.target.files?.[0])}
+              />
+            </label>
+          )}
+        </section>
       </div>
 
-      <div className="my-7 border-t divider" />
-
-      <h2 className="mb-4 font-semibold text-[var(--ink)]">Approved loan</h2>
-      <div className="grid gap-4 md:grid-cols-2">
-        {input('branch', 'RACPC / loan centre')}
-        {input('loanAccount', 'Loan account number')}
-        {input('sanctionReference', 'Sanction reference')}
-        {input('payerName', 'Payer name')}
-        <Field label="Payer relationship *">
-          <Select
-            value={value.relationship}
-            onChange={(event) => onChange({ ...value, relationship: event.target.value })}
-          >
-            <option>Parent</option>
-            <option>Self</option>
-            <option>Guardian</option>
-          </Select>
-        </Field>
-        {input('pan', 'PAN of payer')}
-      </div>
-
-      <label className="mt-6 block rounded-xl border-2 border-dashed border-[var(--border)] p-5 text-center text-sm text-[var(--ink-soft)]">
-        {evidence ? (
-          <span className="font-semibold text-[var(--success)]">Attached: {evidence.name}</span>
-        ) : (
-          'Attach the loan sanction letter (PDF, JPG or PNG)'
-        )}
-        <input
-          type="file"
-          accept=".pdf,.jpg,.jpeg,.png"
-          className="mt-3 block w-full text-xs"
-          onChange={(event) => setEvidence(event.target.files?.[0])}
-        />
-      </label>
-
-      <button
-        type="button"
-        className="mt-3 text-sm font-semibold text-[var(--accent)] underline decoration-[var(--accent)]/30 underline-offset-4"
-        onClick={() =>
-          setEvidence(
-            new File(
-              ['%PDF-1.4\nSynthetic TuitionFlow sanction evidence\n%%EOF'],
-              'synthetic-sanction-letter.pdf',
-              { type: 'application/pdf' },
-            ),
-          )
-        }
-      >
-        Use sample evidence
-      </button>
-
-      <label className="mt-5 flex items-start gap-3 text-sm text-[var(--ink-soft)]">
+      <label className="mt-8 flex items-start gap-3 text-sm text-[var(--ink-soft)]">
         <input
           type="checkbox"
           checked={accepted}
@@ -586,6 +662,15 @@ function DetailsStep({
         </span>
       </label>
     </>
+  );
+}
+
+function FormSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section>
+      <h2 className="mb-4 font-semibold text-[var(--ink)]">{title}</h2>
+      <div className="grid gap-4 md:grid-cols-2">{children}</div>
+    </section>
   );
 }
 

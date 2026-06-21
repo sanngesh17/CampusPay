@@ -41,6 +41,7 @@ html,
 body,
 #root {
   min-height: 100%;
+  scroll-padding-top: 96px;
 }
 
 body {
@@ -88,11 +89,11 @@ textarea {
   justify-content: space-between;
   border: 1px solid var(--border);
   border-radius: 999px;
-  background: rgba(252, 250, 245, 0.9);
+  background: var(--surface);
   padding: 0 12px 0 20px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .nav-left {
@@ -166,6 +167,14 @@ textarea {
   margin: 0 auto;
   flex-direction: column;
   gap: 28px;
+}
+
+.app-container > *,
+.tf-card,
+.list-wrapper,
+.dashboard-header,
+.landing-page {
+  scroll-margin-top: 96px;
 }
 
 .app-container:has(.landing-page) {

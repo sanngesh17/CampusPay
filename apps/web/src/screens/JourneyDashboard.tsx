@@ -99,7 +99,11 @@ function StudentPaymentsDashboard({
   cases: JourneyCase[];
   isLoading: boolean;
 }) {
-  const groups = studentSemesterGroups(cases);
+  const sortedCases = [...cases].sort(
+    (left, right) =>
+      semesterIndex(left.semesterLabel || 'Semester 1') -
+      semesterIndex(right.semesterLabel || 'Semester 1'),
+  );
   return (
     <>
       <DashboardIntro
@@ -123,21 +127,19 @@ function StudentPaymentsDashboard({
         </Link>
       </div>
       <div className="grid gap-4">
-        {groups.map((group) => (
-          <section key={group.semester} className="list-wrapper">
-            <div className="list-row !grid-cols-[1fr_auto] bg-[rgba(32,32,32,0.015)]">
-              <div className="cell-student">{group.semester}</div>
-              <span className="status-badge status-warning">{group.cases.length}</span>
-            </div>
-            {group.cases.map((item) => (
-              <PaymentListRow key={item.id} item={item} studentLabel={group.semester} />
-            ))}
-          </section>
-        ))}
-        {isLoading ? <Card className="empty-state">Loading payments...</Card> : null}
-        {!isLoading && cases.length === 0 ? (
-          <Card className="empty-state">No payments match this queue.</Card>
-        ) : null}
+        <main className="list-wrapper">
+          {sortedCases.map((item) => (
+            <PaymentListRow
+              key={item.id}
+              item={item}
+              studentLabel={item.semesterLabel || 'Semester 1'}
+            />
+          ))}
+          {isLoading ? <div className="empty-state">Loading payments...</div> : null}
+          {!isLoading && cases.length === 0 ? (
+            <div className="empty-state">No payments match this queue.</div>
+          ) : null}
+        </main>
       </div>
     </>
   );
@@ -514,20 +516,6 @@ function LenderCaseRow({
       </div>
     </div>
   );
-}
-
-function studentSemesterGroups(cases: JourneyCase[]) {
-  const groups = new Map<string, JourneyCase[]>();
-  for (const item of cases) {
-    const semester = item.semesterLabel || 'Semester 1';
-    groups.set(semester, [...(groups.get(semester) ?? []), item]);
-  }
-  return [...groups.entries()]
-    .sort(([left], [right]) => semesterIndex(left) - semesterIndex(right))
-    .map(([semester, items]) => ({
-      semester,
-      cases: items.sort((left, right) => updatedTime(right) - updatedTime(left)),
-    }));
 }
 
 function semesterIndex(label: string): number {
