@@ -15,6 +15,11 @@ export interface JourneyCase {
   collectionReference: string;
   providerName: string;
   providerType: string;
+  semesterLabel: string;
+  student?: {
+    name: string;
+    email: string;
+  };
   lenderName?: string;
   lenderApproved: boolean;
   feeBreakdown: {
@@ -82,10 +87,12 @@ export interface JourneyCase {
   legalHold?: { active: boolean; reason: string; setAt: string; releasedAt?: string };
   privacyErasedAt?: string;
   audit: Array<{ event: string; at: string; actorId?: string; detail?: string }>;
+  createdAt: string;
+  lastUpdatedAt?: string;
 }
 
 function token(): string {
-  const value = sessionStorage.getItem('tf_token');
+  const value = sessionStorage.getItem('tf_token:v1');
   if (!value) throw new Error('Please sign in');
   return value;
 }
@@ -107,12 +114,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     });
     if (refreshed.ok) {
       const session = (await refreshed.json()) as { accessToken: string; user: AuthUser };
-      sessionStorage.setItem('tf_token', session.accessToken);
-      sessionStorage.setItem('tf_user', JSON.stringify(session.user));
+      sessionStorage.setItem('tf_token:v1', session.accessToken);
+      sessionStorage.setItem('tf_user:v1', JSON.stringify(session.user));
       response = await send();
     } else {
-      sessionStorage.removeItem('tf_token');
-      sessionStorage.removeItem('tf_user');
+      sessionStorage.removeItem('tf_token:v1');
+      sessionStorage.removeItem('tf_user:v1');
       throw new Error('Session expired. Please sign in again.');
     }
   }
@@ -133,7 +140,9 @@ export const journeyApi = {
         ? '/api/cases'
         : user.role === 'LENDER_OFFICER'
           ? '/api/lender/cases'
-          : '/api/operations/cases',
+          : user.role === 'UNIVERSITY_FINANCE'
+            ? '/api/cases'
+            : '/api/operations/cases',
     ),
   get: (id: string) => request<JourneyCase>(`/api/cases/${id}`),
   create: (body: Record<string, unknown>) =>

@@ -4,6 +4,6 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  server: { port: 5173, proxy: { '/api': 'http://localhost:3000' } },
+  server: { port: 5173, allowedHosts: true, proxy: { '/api': 'http://localhost:3000' } },
   preview: { port: 5173 },
 });

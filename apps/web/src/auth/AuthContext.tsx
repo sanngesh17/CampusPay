@@ -1,12 +1,13 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, use, useMemo, useState, type ReactNode } from 'react';
 
-export type UserRole = 'STUDENT' | 'LENDER_OFFICER' | 'PAYMENT_OPS';
+export type UserRole = 'STUDENT' | 'LENDER_OFFICER' | 'PAYMENT_OPS' | 'UNIVERSITY_FINANCE';
 export interface AuthUser {
   id: string;
   email: string;
   displayName: string;
   role: UserRole;
   lenderId?: string;
+  universityName?: string;
 }
 interface AuthState {
   user?: AuthUser;
@@ -16,14 +17,16 @@ interface AuthState {
 }
 
 const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
+const TOKEN_KEY = 'tf_token:v1';
+const USER_KEY = 'tf_user:v1';
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | undefined>(
-    () => sessionStorage.getItem('tf_token') ?? undefined,
+    () => sessionStorage.getItem(TOKEN_KEY) ?? undefined,
   );
   const [user, setUser] = useState<AuthUser | undefined>(() => {
-    const value = sessionStorage.getItem('tf_user');
+    const value = sessionStorage.getItem(USER_KEY);
     return value ? (JSON.parse(value) as AuthUser) : undefined;
   });
   const value = useMemo<AuthState>(
@@ -39,15 +42,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
         if (!response.ok) throw new Error('Invalid email or password');
         const body = (await response.json()) as { accessToken: string; user: AuthUser };
-        sessionStorage.setItem('tf_token', body.accessToken);
-        sessionStorage.setItem('tf_user', JSON.stringify(body.user));
+        sessionStorage.setItem(TOKEN_KEY, body.accessToken);
+        sessionStorage.setItem(USER_KEY, JSON.stringify(body.user));
         setToken(body.accessToken);
         setUser(body.user);
       },
       logout() {
         void fetch(`${BASE}/api/auth/logout`, { method: 'POST', credentials: 'include' });
-        sessionStorage.removeItem('tf_token');
-        sessionStorage.removeItem('tf_user');
+        sessionStorage.removeItem(TOKEN_KEY);
+        sessionStorage.removeItem(USER_KEY);
         setToken(undefined);
         setUser(undefined);
       },
@@ -58,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 export function useAuth(): AuthState {
-  const value = useContext(AuthContext);
+  const value = use(AuthContext);
   if (!value) throw new Error('AuthProvider is missing');
   return value;
 }

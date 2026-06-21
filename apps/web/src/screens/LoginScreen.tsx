@@ -11,13 +11,18 @@ const ACCOUNTS = [
   },
   {
     label: 'University finance',
-    email: 'ops@tuitionflow.local',
-    description: 'Receive and reconcile tuition transfers',
+    email: 'finance-warwick@tuitionflow.local',
+    description: 'Track Warwick student payment initiations',
+  },
+  {
+    label: 'Lender officer',
+    email: 'lender@tuitionflow.local',
+    description: 'Approve sanctioned-loan disbursements',
   },
   {
     label: 'Payment ops',
-    email: 'lender@tuitionflow.local',
-    description: 'Handle settlements and exceptions',
+    email: 'ops@tuitionflow.local',
+    description: 'Handle settlement operations and exceptions',
   },
 ];
 
@@ -73,7 +78,7 @@ export function LoginScreen() {
 
             <div className="flex flex-wrap gap-3">
               <Button
-                className="rounded-full bg-amber-300 px-6 py-3 text-base font-semibold text-slate-950 shadow-lg shadow-amber-300/20 hover:bg-amber-200"
+                className="rounded-full bg-amber-300 px-6 py-3 text-base font-semibold text-amber-950 shadow-lg shadow-amber-300/20 hover:bg-amber-200"
                 onClick={() =>
                   document
                     .getElementById('demo-login')
@@ -106,6 +111,7 @@ export function LoginScreen() {
                 <div className="grid gap-3">
                   {ACCOUNTS.map((account) => (
                     <button
+                      type="button"
                       key={account.email}
                       onClick={() => setEmail(account.email)}
                       className={`rounded-2xl border p-4 text-left transition ${email === account.email ? 'border-brand-500 bg-brand-50 shadow-sm ring-2 ring-brand-100' : 'border-slate-200 bg-white hover:border-brand-200'}`}

@@ -14,7 +14,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "demo": "pnpm --filter @tuitionflow/api build && concurrently -k -n api,web -c blue,green \"pnpm --filter @tuitionflow/api start\" \"pnpm --filter @tuitionflow/web dev\"",
+    "demo": "pnpm --filter @tuitionflow/api... build && concurrently -k -n api,web -c blue,green \"pnpm --filter @tuitionflow/api start\" \"pnpm --filter @tuitionflow/web dev\"",
     "db:up": "docker compose -f infra/docker-compose.yml up -d --wait postgres",
     "db:migrate": "cross-env DATABASE_URL=postgresql://tuitionflow:tuitionflow@localhost:5432/tuitionflow?schema=public pnpm --filter @tuitionflow/api exec prisma migrate deploy",
     "db:backup-restore-smoke": "powershell -NoProfile -ExecutionPolicy Bypass -File infra/backup-restore-smoke.ps1",

@@ -66,6 +66,7 @@ export interface JourneyCaseRecord {
   feeBreakdown: FeeBreakdown;
   providerName: string;
   providerType: 'BANK' | 'NBFC';
+  semesterLabel: string;
   personalDetailsCipher: string;
   collectionReference: string;
   lenderId?: string;
@@ -111,6 +112,7 @@ export interface CreateJourneyInput {
   feeBreakdown: FeeBreakdown;
   providerName: string;
   providerType: 'BANK' | 'NBFC';
+  semesterLabel?: string;
   studentEmail: string;
   firstName: string;
   middleName?: string;

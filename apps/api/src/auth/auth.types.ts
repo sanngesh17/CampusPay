@@ -1,4 +1,4 @@
-export type UserRole = 'STUDENT' | 'LENDER_OFFICER' | 'PAYMENT_OPS';
+export type UserRole = 'STUDENT' | 'LENDER_OFFICER' | 'PAYMENT_OPS' | 'UNIVERSITY_FINANCE';
 
 export interface AuthUser {
   readonly id: string;
@@ -6,6 +6,7 @@ export interface AuthUser {
   readonly displayName: string;
   readonly role: UserRole;
   readonly lenderId?: string;
+  readonly universityName?: string;
 }
 
 export interface AuthenticatedRequest {

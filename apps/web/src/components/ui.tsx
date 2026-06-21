@@ -15,19 +15,23 @@ export function Card({ children, className = '' }: { children: ReactNode; classN
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost';
 
+const BUTTON_STYLES: Record<ButtonVariant, string> = {
+  primary: 'bg-brand-600 text-white shadow-sm hover:bg-brand-700',
+  secondary: 'bg-slate-100 text-slate-800 hover:bg-slate-200',
+  ghost: 'text-slate-600 hover:bg-slate-100',
+};
+
 export function Button({
   variant = 'primary',
   className = '',
+  type = 'button',
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
   const base =
     'inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50';
-  const styles: Record<ButtonVariant, string> = {
-    primary: 'bg-brand-600 text-white shadow-sm hover:bg-brand-700',
-    secondary: 'bg-slate-100 text-slate-800 hover:bg-slate-200',
-    ghost: 'text-slate-600 hover:bg-slate-100',
-  };
-  return <button className={`${base} ${styles[variant]} ${className}`} {...props} />;
+  return (
+    <button type={type} className={`${base} ${BUTTON_STYLES[variant]} ${className}`} {...props} />
+  );
 }
 
 export function Field({

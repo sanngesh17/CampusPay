@@ -8,6 +8,39 @@ interface StoredUser extends AuthUser {
   readonly passwordHash: string;
 }
 
+const UNIVERSITY_FINANCE_USERS = [
+  {
+    id: 'finance-warwick',
+    email: 'finance-warwick@tuitionflow.local',
+    displayName: 'University of Warwick Finance',
+    universityName: 'University of Warwick',
+  },
+  {
+    id: 'finance-oxford',
+    email: 'finance-oxford@tuitionflow.local',
+    displayName: 'University of Oxford Finance',
+    universityName: 'University of Oxford',
+  },
+  {
+    id: 'finance-cambridge',
+    email: 'finance-cambridge@tuitionflow.local',
+    displayName: 'University of Cambridge Finance',
+    universityName: 'University of Cambridge',
+  },
+  {
+    id: 'finance-imperial',
+    email: 'finance-imperial@tuitionflow.local',
+    displayName: 'Imperial College London Finance',
+    universityName: 'Imperial College London',
+  },
+  {
+    id: 'finance-ucl',
+    email: 'finance-ucl@tuitionflow.local',
+    displayName: 'University College London Finance',
+    universityName: 'University College London',
+  },
+] as const;
+
 @Injectable()
 export class AuthService implements OnModuleInit {
   private readonly users = new Map<string, StoredUser>();
@@ -23,6 +56,7 @@ export class AuthService implements OnModuleInit {
         email: 'student@tuitionflow.local',
         displayName: 'Aarav Sharma',
         role: 'STUDENT',
+        universityName: 'University of Warwick',
         passwordHash,
       },
       {
@@ -40,6 +74,11 @@ export class AuthService implements OnModuleInit {
         role: 'PAYMENT_OPS',
         passwordHash,
       },
+      ...UNIVERSITY_FINANCE_USERS.map((user) => ({
+        ...user,
+        role: 'UNIVERSITY_FINANCE' as const,
+        passwordHash,
+      })),
     ];
     for (const user of seeded) this.users.set(user.email, user);
   }

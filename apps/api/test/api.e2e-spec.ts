@@ -13,6 +13,8 @@ import request from 'supertest';
 import { FieldCipher } from '../src/common/crypto/field-cipher';
 import { DomainExceptionFilter } from '../src/common/filters/domain-exception.filter';
 import { AppModule } from '../src/app.module';
+import { JourneyService } from '../src/journey/journey.service';
+import type { CreateJourneyInput } from '../src/journey/journey.types';
 import type { StudentRepository } from '../src/persistence/ports';
 import { FIELD_CIPHER, STUDENT_REPOSITORY } from '../src/tokens';
 
@@ -51,6 +53,55 @@ describe('TuitionFlow API (e2e — mock rail, no DB, no network)', () => {
     await app.close();
   });
 
+  async function token(email: string): Promise<string> {
+    const response = await request(http)
+      .post('/api/auth/login')
+      .send({ email, password: 'DemoPass123!' })
+      .expect(201);
+    return response.body.accessToken as string;
+  }
+
+  function journeyBody(
+    universityName: string,
+    studentEmail: string,
+    firstName: string,
+  ): CreateJourneyInput {
+    return {
+      fundingType: 'FULL_LOAN',
+      amountMinor: '100000000',
+      lenderAmountMinor: '100000000',
+      lenderId: 'lender-sbi',
+      lenderName: 'State Bank of India',
+      branchName: 'SBI RACPC',
+      loanAccountNumber: 'EDU-001',
+      sanctionReference: 'SANCTION-001',
+      universityName,
+      destinationCountry: 'United Kingdom',
+      targetCurrency: 'GBP',
+      targetAmountMinor: '1000000',
+      feeBreakdown: {
+        tuitionAdvanceMinor: '1000000',
+        courseDepositMinor: '0',
+        accommodationMinor: '0',
+        otherMinor: '0',
+      },
+      providerName: 'State Bank of India',
+      providerType: 'BANK',
+      semesterLabel: 'Semester 1',
+      studentEmail,
+      firstName,
+      familyName: 'Sharma',
+      pinCode: '560001',
+      addressLine1: '12 Residency Road',
+      city: 'Bengaluru',
+      state: 'Karnataka',
+      phone: '9876543210',
+      payerName: 'Raj Sharma',
+      payerRelationship: 'Parent',
+      payerPan: 'ABCDE1234F',
+    };
+  }
+
   it('exposes a health endpoint', async () => {
     const res = await request(http).get('/health').expect(200);
     expect(res.body.status).toBe('ok');
@@ -62,6 +113,7 @@ describe('TuitionFlow API (e2e — mock rail, no DB, no network)', () => {
       .post('/api/auth/login')
       .send({ email: 'student@tuitionflow.local', password: 'DemoPass123!' })
       .expect(201);
+    expect(login.body.user.universityName).toBe('University of Warwick');
     const cookie = login.headers['set-cookie'] as unknown as string[];
     expect(cookie.join(';')).toContain('HttpOnly');
     const refreshed = await request(http)
@@ -282,14 +334,171 @@ describe('TuitionFlow API (e2e — mock rail, no DB, no network)', () => {
     expect(cipher.decrypt(student!.panCipher as string)).toBe('ABCDE1234F');
   });
 
+  it('scopes university finance users to their college and exposes only tracking-safe fields', async () => {
+    const studentToken = await token('student@tuitionflow.local');
+    const journey = app.get(JourneyService);
+    const financeLogin = await request(http)
+      .post('/api/auth/login')
+      .send({ email: 'finance-warwick@tuitionflow.local', password: 'DemoPass123!' })
+      .expect(201);
+    expect(financeLogin.body.user.role).toBe('UNIVERSITY_FINANCE');
+    expect(financeLogin.body.user.universityName).toBe('University of Warwick');
+    const financeToken = financeLogin.body.accessToken as string;
+
+    const warwick = await request(http)
+      .post('/api/cases')
+      .set('Authorization', `Bearer ${studentToken}`)
+      .send(journeyBody('University of Warwick', 'aarav.finance@example.test', 'Aarav'))
+      .expect(201);
+    const oxford = await journey.create(
+      {
+        id: 'student-b',
+        email: 'diya.patel@example.com',
+        displayName: 'Diya Patel',
+        role: 'STUDENT',
+        universityName: 'University of Oxford',
+      },
+      journeyBody('University of Oxford', 'diya.finance@example.test', 'Diya'),
+    );
+
+    const list = await request(http)
+      .get('/api/cases')
+      .set('Authorization', `Bearer ${financeToken}`)
+      .expect(200);
+    const ids = (list.body as Array<{ id: string }>).map((item) => item.id);
+    expect(ids).toContain(warwick.body.id);
+    expect(ids).not.toContain(oxford.id);
+    const warwickRow = (list.body as Array<{ id: string; student: unknown }>).find(
+      (item) => item.id === warwick.body.id,
+    );
+    expect(warwickRow?.student).toEqual({
+      name: 'Aarav Sharma',
+      email: 'aarav.finance@example.test',
+    });
+
+    const detail = await request(http)
+      .get(`/api/cases/${warwick.body.id}`)
+      .set('Authorization', `Bearer ${financeToken}`)
+      .expect(200);
+    expect(detail.body.student.email).toBe('aarav.finance@example.test');
+    expect(detail.body.documents).toEqual([]);
+    expect(detail.body.grievances).toEqual([]);
+    expect(detail.body.privacyRequests).toEqual([]);
+    expect(detail.body.audit).toEqual([]);
+    expect(detail.body.compliance).toBeUndefined();
+    expect(detail.body.legalHold).toBeUndefined();
+
+    await request(http)
+      .get(`/api/cases/${oxford.id}`)
+      .set('Authorization', `Bearer ${financeToken}`)
+      .expect(403);
+    await request(http)
+      .post(`/api/cases/${warwick.body.id}/submit`)
+      .set('Authorization', `Bearer ${financeToken}`)
+      .expect(403);
+    await request(http)
+      .post(`/api/lender/cases/${warwick.body.id}/decision`)
+      .set('Authorization', `Bearer ${financeToken}`)
+      .send({ decision: 'APPROVE' })
+      .expect(403);
+    await request(http)
+      .post(`/api/operations/cases/${warwick.body.id}/quote`)
+      .set('Authorization', `Bearer ${financeToken}`)
+      .expect(403);
+    await request(http)
+      .get(`/api/cases/${warwick.body.id}/instruction`)
+      .set('Authorization', `Bearer ${financeToken}`)
+      .expect(403);
+  });
+
+  it('locks student journey cases to the account university and groups by semester label', async () => {
+    const studentToken = await token('student@tuitionflow.local');
+    const journey = app.get(JourneyService);
+    const created = await request(http)
+      .post('/api/cases')
+      .set('Authorization', `Bearer ${studentToken}`)
+      .send({
+        ...journeyBody('University of Oxford', 'student@tuitionflow.local', 'Aarav'),
+        semesterLabel: 'Semester 3',
+      })
+      .expect(201);
+    expect(created.body.universityName).toBe('University of Warwick');
+    expect(created.body.semesterLabel).toBe('Semester 3');
+
+    await request(http)
+      .post('/api/cases')
+      .set('Authorization', `Bearer ${studentToken}`)
+      .send({
+        ...journeyBody('University of Warwick', 'student@tuitionflow.local', 'Aarav'),
+        semesterLabel: 'Semester 3',
+      })
+      .expect(409)
+      .expect(({ body }) => {
+        expect(body.message).toBe('A payment already exists for this semester');
+      });
+    const differentSemester = await request(http)
+      .post('/api/cases')
+      .set('Authorization', `Bearer ${studentToken}`)
+      .send({
+        ...journeyBody('University of Warwick', 'student@tuitionflow.local', 'Aarav'),
+        semesterLabel: 'Semester 6',
+      })
+      .expect(201);
+    expect(differentSemester.body.semesterLabel).toBe('Semester 6');
+
+    const hidden = await journey.create(
+      {
+        id: 'student-a',
+        email: 'student@tuitionflow.local',
+        displayName: 'Aarav Sharma',
+        role: 'STUDENT',
+        universityName: 'University of Oxford',
+      },
+      {
+        ...journeyBody('University of Oxford', 'student@tuitionflow.local', 'Aarav'),
+        semesterLabel: 'Semester 4',
+      },
+    );
+
+    const list = await request(http)
+      .get('/api/cases')
+      .set('Authorization', `Bearer ${studentToken}`)
+      .expect(200);
+    const ids = (list.body as Array<{ id: string }>).map((item) => item.id);
+    expect(ids).toContain(created.body.id);
+    expect(ids).not.toContain(hidden.id);
+    await request(http)
+      .get(`/api/cases/${hidden.id}`)
+      .set('Authorization', `Bearer ${studentToken}`)
+      .expect(403);
+  });
+
+  it('cleans duplicate semester payment snapshots by keeping the newest record', async () => {
+    const journey = app.get(JourneyService);
+    const actor = {
+      id: 'cleanup-student',
+      email: 'cleanup@example.test',
+      displayName: 'Cleanup Student',
+      role: 'PAYMENT_OPS' as const,
+    };
+    const older = await journey.create(
+      actor,
+      journeyBody('University of Warwick', 'cleanup@example.test', 'Cleanup'),
+    );
+    const newer = await journey.create(actor, {
+      ...journeyBody('University of Warwick', 'cleanup@example.test', 'Cleanup'),
+      semesterLabel: 'Semester 1',
+    });
+    const cleanup = await journey.cleanupDuplicateSemesterPayments();
+    expect(cleanup.deleted).toContain(older.id);
+    expect(cleanup.kept).toContain(newer.id);
+    await request(http)
+      .get(`/api/cases/${older.id}`)
+      .set('Authorization', `Bearer ${await token('ops@tuitionflow.local')}`)
+      .expect(404);
+  });
+
   it('runs the compliance-ready student -> lender -> operations -> student journey', async () => {
-    async function token(email: string): Promise<string> {
-      const response = await request(http)
-        .post('/api/auth/login')
-        .send({ email, password: 'DemoPass123!' })
-        .expect(201);
-      return response.body.accessToken as string;
-    }
     const studentToken = await token('student@tuitionflow.local');
     const lenderToken = await token('lender@tuitionflow.local');
     const opsToken = await token('ops@tuitionflow.local');
@@ -318,6 +527,7 @@ describe('TuitionFlow API (e2e — mock rail, no DB, no network)', () => {
         },
         providerName: 'State Bank of India',
         providerType: 'BANK',
+        semesterLabel: 'Semester 7',
         studentEmail: 'student@tuitionflow.local',
         firstName: 'Aarav',
         familyName: 'Sharma',

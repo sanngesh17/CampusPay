@@ -1,12 +1,22 @@
-import { PrismaClient } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
 import { FieldCipher } from '../src/common/crypto/field-cipher';
 import { loadAppConfig } from '../src/config/app-config';
 import { SEED_LENDERS, SEED_STUDENTS, SEED_UNIVERSITIES } from '../src/seed-data';
 
 /** Seeds the database with the two demo personas and a 50-row beneficiary directory. Sensitive PII
  * is field-level encrypted before it is written — the DB stores ciphertext only. */
+async function createPrismaClient(): Promise<PrismaClient> {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) throw new Error('DATABASE_URL is required to seed Prisma');
+  const { PrismaClient } = await import('@prisma/client');
+  const { PrismaPg } = await import('@prisma/adapter-pg');
+  return new PrismaClient({
+    adapter: new PrismaPg({ connectionString }),
+  });
+}
+
 async function main(): Promise<void> {
-  const prisma = new PrismaClient();
+  const prisma = await createPrismaClient();
   const cipher = new FieldCipher(loadAppConfig().encryptionKey);
 
   for (const s of SEED_STUDENTS) {

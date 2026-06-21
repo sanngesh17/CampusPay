@@ -1,17 +1,9 @@
 import { useMemo, useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { journeyApi } from '../api/journey';
 import { useAuth } from '../auth/AuthContext';
 import { Button, Card, ErrorNote, Field, Select, TextInput } from '../components/ui';
-
-const INSTITUTIONS = [
-  { name: 'University of Warwick', city: 'Coventry', short: 'W' },
-  { name: 'University of Oxford', city: 'Oxford', short: 'O' },
-  { name: 'University of Cambridge', city: 'Cambridge', short: 'C' },
-  { name: 'Imperial College London', city: 'London', short: 'I' },
-  { name: 'University College London', city: 'London', short: 'U' },
-] as const;
 
 const PROVIDERS = [
   {
@@ -51,7 +43,18 @@ const PROVIDERS = [
   },
 ] as const;
 
-const STEP_LABELS = ['Institution', 'Payment', 'Funding', 'Provider', 'Details'];
+const SEMESTERS = [
+  'Semester 1',
+  'Semester 2',
+  'Semester 3',
+  'Semester 4',
+  'Semester 5',
+  'Semester 6',
+  'Semester 7',
+  'Semester 8',
+] as const;
+
+const STEP_LABELS = ['University', 'Payment', 'Funding', 'Provider', 'Details'];
 
 interface Fees {
   tuition: string;
@@ -59,6 +62,13 @@ interface Fees {
   accommodation: string;
   other: string;
 }
+
+const FEE_FIELDS: Array<[keyof Fees, string]> = [
+  ['tuition', 'Tuition fee - payment in advance'],
+  ['deposit', 'Tuition fee - course deposit'],
+  ['accommodation', 'Accommodation fee'],
+  ['other', 'Other university fees'],
+];
 
 interface Details {
   email: string;
@@ -82,9 +92,10 @@ interface Details {
 export function NewJourneyPayment() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const client = useQueryClient();
 
   const [step, setStep] = useState(1);
-  const [institution, setInstitution] = useState('');
+  const [semesterLabel, setSemesterLabel] = useState<(typeof SEMESTERS)[number]>('Semester 1');
   const [fees, setFees] = useState<Fees>({
     tuition: '',
     deposit: '',
@@ -114,6 +125,7 @@ export function NewJourneyPayment() {
   });
 
   const selectedProvider = PROVIDERS.find((item) => item.id === providerId);
+  const universityName = user?.universityName ?? 'University of Warwick';
   const totalMinor = useMemo(
     () => Object.values(fees).reduce((sum, value) => sum + parseMinor(value), 0n),
     [fees],
@@ -134,10 +146,11 @@ export function NewJourneyPayment() {
         lenderName: selectedProvider.name,
         providerName: selectedProvider.name,
         providerType: selectedProvider.kind,
+        semesterLabel,
         branchName: details.branch,
         loanAccountNumber: details.loanAccount,
         sanctionReference: details.sanctionReference,
-        universityName: institution,
+        universityName,
         destinationCountry: 'United Kingdom',
         targetCurrency: 'GBP',
         targetAmountMinor: totalMinor.toString(),
@@ -166,7 +179,10 @@ export function NewJourneyPayment() {
       await journeyApi.submit(created.id);
       return created.id;
     },
-    onSuccess: (id) => navigate(`/payments/${id}`),
+    onSuccess: async (id) => {
+      await client.invalidateQueries({ queryKey: ['journey-cases', user?.id] });
+      navigate(`/payments/${id}`);
+    },
   });
 
   if (!user) return <Navigate to="/login" replace />;
@@ -174,7 +190,7 @@ export function NewJourneyPayment() {
 
   const canContinue =
     step === 1
-      ? institution !== ''
+      ? true
       : step === 2
         ? totalMinor > 0n
         : step === 3
@@ -189,7 +205,13 @@ export function NewJourneyPayment() {
       <div className="grid gap-7 lg:grid-cols-[1fr_300px]">
         <Card className="overflow-hidden">
           <div className="p-6 md:p-9">
-            {step === 1 ? <InstitutionStep value={institution} onChange={setInstitution} /> : null}
+            {step === 1 ? (
+              <UniversityStep
+                universityName={universityName}
+                semesterLabel={semesterLabel}
+                setSemesterLabel={setSemesterLabel}
+              />
+            ) : null}
             {step === 2 ? <PaymentStep fees={fees} setFees={setFees} total={totalMinor} /> : null}
             {step === 3 ? <FundingStep /> : null}
             {step === 4 ? <ProviderStep value={providerId} onChange={setProviderId} /> : null}
@@ -237,7 +259,8 @@ export function NewJourneyPayment() {
         </Card>
 
         <PaymentSummary
-          institution={institution}
+          institution={universityName}
+          semesterLabel={semesterLabel}
           totalMinor={totalMinor}
           sourceMinor={sourceMinor}
           provider={selectedProvider?.name}
@@ -283,37 +306,43 @@ function SectionTitle({ eyebrow, title, copy }: { eyebrow: string; title: string
   );
 }
 
-function InstitutionStep({ value, onChange }: { value: string; onChange(value: string): void }) {
+function UniversityStep({
+  universityName,
+  semesterLabel,
+  setSemesterLabel,
+}: {
+  universityName: string;
+  semesterLabel: string;
+  setSemesterLabel(value: (typeof SEMESTERS)[number]): void;
+}) {
   return (
     <>
       <SectionTitle
         eyebrow="Destination"
-        title="Where are you paying?"
-        copy="Choose the country and the institution that should receive your tuition payment."
+        title="Your university payment"
+        copy="This student login is linked to one university. Choose the semester this payment belongs to."
       />
       <Field label="Institution country">
         <Select value="United Kingdom" disabled>
           <option>United Kingdom</option>
         </Select>
       </Field>
-      <div className="mt-6 grid gap-3 sm:grid-cols-2">
-        {INSTITUTIONS.map((item) => (
-          <button
-            key={item.name}
-            data-testid={`institution-${item.short.toLowerCase()}`}
-            onClick={() => onChange(item.name)}
-            className={`flex items-center gap-4 rounded-xl border p-4 text-left transition ${value === item.name ? 'border-brand-500 bg-brand-50 ring-2 ring-brand-100' : 'border-slate-200 hover:border-brand-200 hover:bg-slate-50'}`}
-          >
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-sm font-bold text-white">
-              {item.short}
-            </span>
-            <span>
-              <span className="block text-sm font-semibold text-slate-800">{item.name}</span>
-              <span className="mt-1 block text-xs text-slate-400">{item.city}, United Kingdom</span>
-            </span>
-          </button>
-        ))}
+      <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Institution
+        </div>
+        <div className="mt-1 text-lg font-semibold text-slate-900">{universityName}</div>
       </div>
+      <Field label="Semester">
+        <Select
+          value={semesterLabel}
+          onChange={(event) => setSemesterLabel(event.target.value as (typeof SEMESTERS)[number])}
+        >
+          {SEMESTERS.map((semester) => (
+            <option key={semester}>{semester}</option>
+          ))}
+        </Select>
+      </Field>
     </>
   );
 }
@@ -327,13 +356,6 @@ function PaymentStep({
   setFees(value: Fees): void;
   total: bigint;
 }) {
-  const fields: Array<[keyof Fees, string]> = [
-    ['tuition', 'Tuition fee - payment in advance'],
-    ['deposit', 'Tuition fee - course deposit'],
-    ['accommodation', 'Accommodation fee'],
-    ['other', 'Other university fees'],
-  ];
-
   return (
     <>
       <SectionTitle
@@ -342,7 +364,7 @@ function PaymentStep({
         copy="Enter one or more amounts in British pounds. Leave fields blank when they do not apply."
       />
       <div className="space-y-3">
-        {fields.map(([key, label]) => (
+        {FEE_FIELDS.map(([key, label]) => (
           <label
             key={key}
             className="flex items-center rounded-xl border border-slate-200 bg-white focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100"
@@ -427,6 +449,7 @@ function ProviderStep({ value, onChange }: { value: string; onChange(value: stri
       <div className="grid gap-4 sm:grid-cols-2">
         {PROVIDERS.map((item) => (
           <button
+            type="button"
             key={item.id}
             data-testid={`provider-${item.id}`}
             onClick={() => onChange(item.id)}
@@ -562,11 +585,13 @@ function DetailsStep({
 
 function PaymentSummary({
   institution,
+  semesterLabel,
   totalMinor,
   sourceMinor,
   provider,
 }: {
   institution: string;
+  semesterLabel: string;
   totalMinor: bigint;
   sourceMinor: bigint;
   provider?: string;
@@ -580,6 +605,7 @@ function PaymentSummary({
 
       <div className="space-y-4 p-5 text-sm">
         <SummaryRow label="University receives" value={formatCurrency(totalMinor, 'GBP')} />
+        <SummaryRow label="Semester" value={semesterLabel} />
         <SummaryRow label="Indicative INR" value={formatCurrency(sourceMinor, 'INR')} />
         <SummaryRow label="Origin" value="India" />
         <SummaryRow label="Funding" value="Full education loan" />

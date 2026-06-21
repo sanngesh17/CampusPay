@@ -30,7 +30,14 @@ const prismaClientProvider: Provider = {
   useFactory: async (config: AppConfig): Promise<Db | null> => {
     if (config.persistence !== 'prisma') return null;
     const { PrismaClient } = await import('@prisma/client');
-    const client = new PrismaClient();
+    const { PrismaPg } = await import('@prisma/adapter-pg');
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+      throw new Error('DATABASE_URL is required when PERSISTENCE=prisma');
+    }
+    const client = new PrismaClient({
+      adapter: new PrismaPg({ connectionString }),
+    });
     await client.$connect();
     return client;
   },

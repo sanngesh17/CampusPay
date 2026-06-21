@@ -35,6 +35,7 @@ export class JourneyService implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
+    if (this.config.persistence === 'memory' && process.env.JEST_WORKER_ID) return;
     try {
       const rows =
         this.config.persistence === 'prisma' && this.db
@@ -62,6 +63,7 @@ export class JourneyService implements OnModuleInit {
         );
         this.records.set(domain.id, this.normalizeRecord({ ...row.record, domain }));
       }
+      await this.cleanupDuplicateSemesterPayments();
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
@@ -69,6 +71,20 @@ export class JourneyService implements OnModuleInit {
 
   async create(user: AuthUser, input: CreateJourneyInput) {
     const id = randomUUID();
+    const universityName =
+      user.role === 'STUDENT' && user.universityName ? user.universityName : input.universityName;
+    const semesterLabel = input.semesterLabel ?? 'Semester 1';
+    if (
+      user.role === 'STUDENT' &&
+      [...this.records.values()].some(
+        (record) =>
+          record.domain.studentId === user.id &&
+          record.universityName === universityName &&
+          record.semesterLabel === semesterLabel,
+      )
+    ) {
+      throw new ConflictException('A payment already exists for this semester');
+    }
     const domain = new RemittanceCase({
       id,
       studentId: user.id,
@@ -114,13 +130,14 @@ export class JourneyService implements OnModuleInit {
     );
     const record: JourneyCaseRecord = {
       domain,
-      universityName: input.universityName,
+      universityName,
       destinationCountry: input.destinationCountry,
       targetCurrency: input.targetCurrency,
       targetAmountMinor: input.targetAmountMinor,
       feeBreakdown: input.feeBreakdown,
       providerName: input.providerName,
       providerType: input.providerType,
+      semesterLabel,
       personalDetailsCipher,
       collectionReference: `TF-${new Date().getUTCFullYear()}-${id.slice(0, 8).toUpperCase()}`,
       ...(input.lenderId ? { lenderId: input.lenderId } : {}),
@@ -145,6 +162,36 @@ export class JourneyService implements OnModuleInit {
     this.records.set(id, record);
     await this.persist();
     return this.view(record, user);
+  }
+
+  async cleanupDuplicateSemesterPayments(): Promise<{ deleted: string[]; kept: string[] }> {
+    const groups = new Map<string, JourneyCaseRecord[]>();
+    for (const record of this.records.values()) {
+      const key = this.semesterPaymentKey(record);
+      groups.set(key, [...(groups.get(key) ?? []), record]);
+    }
+    const deleted: string[] = [];
+    const kept: string[] = [];
+    for (const records of groups.values()) {
+      if (records.length === 0) continue;
+      const sorted = [...records].sort(
+        (left: JourneyCaseRecord, right: JourneyCaseRecord) =>
+          this.recordUpdatedAt(right) - this.recordUpdatedAt(left),
+      );
+      const [keeper, ...duplicates] = sorted;
+      if (keeper) kept.push(keeper.domain.id);
+      for (const duplicate of duplicates) {
+        deleted.push(duplicate.domain.id);
+        this.records.delete(duplicate.domain.id);
+        await this.deletePrivateArtifacts(duplicate);
+      }
+    }
+    if (deleted.length === 0) return { deleted, kept };
+    if (this.config.persistence === 'prisma' && this.db) {
+      await this.db.journeySnapshot.deleteMany({ where: { id: { in: deleted } } });
+    }
+    await this.persist();
+    return { deleted, kept };
   }
 
   list(user: AuthUser) {
@@ -212,6 +259,7 @@ export class JourneyService implements OnModuleInit {
   ): Promise<{ buffer: Buffer; mimeType: string; name: string }> {
     const record = this.mustGet(id);
     if (!this.canSee(record, user)) throw new ForbiddenException();
+    if (user.role === 'UNIVERSITY_FINANCE') throw new ForbiddenException();
     const document = record.documents.find((item) => item.id === documentId);
     if (!document) throw new NotFoundException('Evidence not found');
     const encrypted = await this.storage.get(document.encryptedPath);
@@ -554,6 +602,7 @@ export class JourneyService implements OnModuleInit {
   async instruction(id: string, user: AuthUser): Promise<Buffer> {
     const record = this.mustGet(id);
     if (!this.canSee(record, user)) throw new ForbiddenException();
+    if (user.role === 'UNIVERSITY_FINANCE') throw new ForbiddenException();
     if (
       ![
         RemittanceStatus.FUNDING_PENDING,
@@ -576,6 +625,7 @@ export class JourneyService implements OnModuleInit {
   async receipt(id: string, user: AuthUser): Promise<Buffer> {
     const record = this.mustGet(id);
     if (!this.canSee(record, user)) throw new ForbiddenException();
+    if (user.role === 'UNIVERSITY_FINANCE') throw new ForbiddenException();
     if (record.domain.status !== RemittanceStatus.RECONCILED || !record.receiptPath)
       throw new ConflictException('Final receipt is available after reconciliation');
     this.audit(record, 'RECEIPT_DOWNLOADED', user.id);
@@ -607,8 +657,11 @@ export class JourneyService implements OnModuleInit {
   private canSee(record: JourneyCaseRecord, user: AuthUser): boolean {
     return (
       user.role === 'PAYMENT_OPS' ||
-      (user.role === 'STUDENT' && record.domain.studentId === user.id) ||
-      (user.role === 'LENDER_OFFICER' && record.lenderId === user.lenderId)
+      (user.role === 'STUDENT' &&
+        record.domain.studentId === user.id &&
+        (!user.universityName || record.universityName === user.universityName)) ||
+      (user.role === 'LENDER_OFFICER' && record.lenderId === user.lenderId) ||
+      (user.role === 'UNIVERSITY_FINANCE' && record.universityName === user.universityName)
     );
   }
   private audit(record: JourneyCaseRecord, event: string, actorId: string, detail?: string): void {
@@ -621,6 +674,21 @@ export class JourneyService implements OnModuleInit {
   }
   private maskReference(value: string): string {
     return value.length <= 4 ? '****' : `****${value.slice(-4)}`;
+  }
+  private semesterPaymentKey(record: JourneyCaseRecord): string {
+    return [record.domain.studentId, record.universityName, record.semesterLabel].join('|');
+  }
+  private recordUpdatedAt(record: JourneyCaseRecord): number {
+    return new Date(
+      record.audit.at(-1)?.at ?? record.payment?.updatedAt ?? record.createdAt,
+    ).getTime();
+  }
+  private async deletePrivateArtifacts(record: JourneyCaseRecord): Promise<void> {
+    await Promise.all([
+      ...record.documents.map((document) => this.storage.delete(document.encryptedPath)),
+      ...(record.instructionPath ? [this.storage.delete(record.instructionPath)] : []),
+      ...(record.receiptPath ? [this.storage.delete(record.receiptPath)] : []),
+    ]);
   }
   private assertInstructionActive(record: JourneyCaseRecord): void {
     if (
@@ -651,6 +719,7 @@ export class JourneyService implements OnModuleInit {
       },
       providerName: record.providerName ?? record.lenderName ?? 'State Bank of India',
       providerType: record.providerType ?? 'BANK',
+      semesterLabel: record.semesterLabel ?? 'Semester 1',
       personalDetailsCipher:
         record.personalDetailsCipher ?? this.cipher.encrypt(JSON.stringify(fallbackProfile)),
       collectionReference:
@@ -815,6 +884,9 @@ export class JourneyService implements OnModuleInit {
     await rename(temporary, this.snapshotPath);
   }
   private view(record: JourneyCaseRecord, user: AuthUser) {
+    const personalDetails = this.personalDetails(record);
+    const lastUpdatedAt = record.audit.at(-1)?.at ?? record.payment?.updatedAt ?? record.createdAt;
+    const universityFinanceView = user.role === 'UNIVERSITY_FINANCE';
     return {
       id: record.domain.id,
       studentId: record.domain.studentId,
@@ -829,7 +901,22 @@ export class JourneyService implements OnModuleInit {
       feeBreakdown: record.feeBreakdown,
       providerName: record.providerName,
       providerType: record.providerType,
+      semesterLabel: record.semesterLabel,
       collectionReference: record.collectionReference,
+      ...(universityFinanceView
+        ? {
+            student: {
+              name: [
+                personalDetails.firstName,
+                personalDetails.middleName,
+                personalDetails.familyName,
+              ]
+                .filter(Boolean)
+                .join(' '),
+              email: personalDetails.studentEmail,
+            },
+          }
+        : {}),
       lenderName: record.lenderName,
       lenderApproved: record.lenderApproved,
       fundingLegs: record.domain.fundingLegs.map((leg) => ({
@@ -838,22 +925,56 @@ export class JourneyService implements OnModuleInit {
         receivedMinor: leg.receivedMinor.toString(),
         funded: leg.requiredMinor === leg.receivedMinor,
       })),
-      documents: record.documents.map(({ encryptedPath: _encryptedPath, ...document }) => document),
-      compliance: record.compliance,
+      documents: universityFinanceView
+        ? []
+        : record.documents.map(({ encryptedPath: _encryptedPath, ...document }) => document),
+      compliance: universityFinanceView ? undefined : record.compliance,
       quote: record.quote,
       payment: record.payment,
       instructionHash: record.instructionHash,
       instructionCreatedAt: record.instructionCreatedAt,
       receiptHash: record.receiptHash,
-      grievances: record.grievances,
-      privacyRequests: record.privacyRequests,
-      consents: record.consents,
-      legalHold: record.legalHold,
-      privacyErasedAt: record.privacyErasedAt,
-      audit: record.audit.map((entry) =>
-        user.role === 'STUDENT' ? { event: entry.event, at: entry.at } : entry,
-      ),
+      grievances: universityFinanceView ? [] : record.grievances,
+      privacyRequests: universityFinanceView ? [] : record.privacyRequests,
+      consents: universityFinanceView ? [] : record.consents,
+      legalHold: universityFinanceView ? undefined : record.legalHold,
+      privacyErasedAt: universityFinanceView ? undefined : record.privacyErasedAt,
+      audit: universityFinanceView
+        ? []
+        : record.audit.map((entry) =>
+            user.role === 'STUDENT' ? { event: entry.event, at: entry.at } : entry,
+          ),
       createdAt: record.createdAt,
+      lastUpdatedAt,
+    };
+  }
+
+  private personalDetails(record: JourneyCaseRecord): {
+    studentEmail: string;
+    firstName: string;
+    middleName?: string;
+    familyName: string;
+  } {
+    let value: {
+      studentEmail?: string;
+      firstName?: string;
+      middleName?: string;
+      familyName?: string;
+    };
+    try {
+      value = JSON.parse(this.cipher.decrypt(record.personalDetailsCipher)) as typeof value;
+    } catch {
+      value = {
+        studentEmail: 'student@tuitionflow.local',
+        firstName: 'Synthetic',
+        familyName: 'Student',
+      };
+    }
+    return {
+      studentEmail: value.studentEmail ?? '',
+      firstName: value.firstName ?? '',
+      ...(value.middleName ? { middleName: value.middleName } : {}),
+      familyName: value.familyName ?? '',
     };
   }
 }
