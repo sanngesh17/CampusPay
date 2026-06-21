@@ -1,6 +1,8 @@
 import type { AuthUser } from '../auth/AuthContext';
+import { firestoreJourneyApi } from './journeyFirestore';
 
 const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
+const DATA_BACKEND = (import.meta.env.VITE_DATA_BACKEND as string | undefined) ?? 'firestore';
 export type FundingType = 'FULL_LOAN' | 'PARTIAL_LOAN' | 'SELF_FUNDED';
 export interface JourneyCase {
   id: string;
@@ -124,16 +126,26 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
   }
   if (!response.ok) {
-    const body = (await response.json().catch(() => ({}))) as { message?: string };
+    const body = (await parseJson(response).catch(() => ({}))) as { message?: string };
     const message = (body.message ?? response.statusText).toLowerCase();
     if (message.includes('invalid or expired access token') || message.includes('unauthorized')) {
       throw new Error('Session expired. Please sign in again.');
     }
     throw new Error(body.message ?? response.statusText);
   }
-  return response.json() as Promise<T>;
+  return parseJson(response) as Promise<T>;
 }
-export const journeyApi = {
+
+async function parseJson(response: Response): Promise<unknown> {
+  const contentType = response.headers.get('content-type') ?? '';
+  if (!contentType.includes('application/json')) {
+    throw new Error(
+      'API is not configured for this deployment. Set VITE_API_URL to the hosted API URL.',
+    );
+  }
+  return response.json();
+}
+const httpJourneyApi = {
   list: (user: AuthUser) =>
     request<JourneyCase[]>(
       user.role === 'STUDENT'
@@ -260,6 +272,8 @@ export const journeyApi = {
     URL.revokeObjectURL(url);
   },
 };
+
+export const journeyApi = DATA_BACKEND === 'firestore' ? firestoreJourneyApi : httpJourneyApi;
 
 function stableKey(id: string, operation: string): string {
   const key = `tf_idem_${operation}_${id}`;

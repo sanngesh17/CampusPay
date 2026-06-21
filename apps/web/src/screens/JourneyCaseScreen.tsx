@@ -21,10 +21,10 @@ export function JourneyCaseScreen() {
     <>
       <ErrorNote message={(queryError as Error | null)?.message} />
       {item ? (
-        <>
+        <div className="payment-detail-page">
           <PaymentTrackingPanel item={item} />
           <PaymentDetailsPanel item={item} />
-        </>
+        </div>
       ) : (
         <Card className="empty-state">Loading payment tracking...</Card>
       )}
@@ -60,18 +60,16 @@ const STOPPED_LABELS: Record<string, string> = {
 
 function PaymentTrackingPanel({ item }: { item: JourneyCase }) {
   return (
-    <section className="list-wrapper">
-      <div className="list-row !grid-cols-[1fr_auto] bg-[rgba(32,32,32,0.015)]">
+    <section className="detail-panel tracking-panel">
+      <div className="detail-panel-header">
         <div>
           <span className="eyebrow !justify-start">Payment processing</span>
-          <div className="cell-student text-[24px] leading-tight">Payment tracking</div>
-          <span className="cell-email">
+          <div className="detail-title">Payment tracking</div>
+          <span className="detail-subtitle">
             {item.collectionReference} · {item.universityName}
           </span>
         </div>
-        <span className={`status-badge ${statusClass(item.status)}`}>
-          {trackingLabel(item.status)}
-        </span>
+        <span className="status-badge status-warning">{etaLabel(item)}</span>
       </div>
       <PaymentTrackingTimeline status={item.status} />
     </section>
@@ -90,6 +88,7 @@ function PaymentTrackingTimeline({ status }: { status: string }) {
         const complete = !stopped && index < activeIndex;
         const current = !stopped && index === activeIndex;
         const reached = complete || current;
+        const connectorClass = complete ? 'timeline-line-complete' : 'timeline-line-pending';
         return (
           <div key={step.key} className="grid grid-cols-[32px_1fr] gap-3">
             <div className="flex flex-col items-center">
@@ -105,9 +104,7 @@ function PaymentTrackingTimeline({ status }: { status: string }) {
                 {complete ? '✓' : index + 1}
               </div>
               {index < TRACKING_STEPS.length - 1 ? (
-                <div
-                  className={`h-12 w-px ${complete ? 'bg-[var(--success)]' : 'bg-[var(--border)]'}`}
-                />
+                <div className={`timeline-line ${connectorClass}`} />
               ) : null}
             </div>
             <div className="pb-7">
@@ -138,25 +135,49 @@ function PaymentDetailsPanel({ item }: { item: JourneyCase }) {
   return (
     <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
       <Card className="p-5 sm:p-6">
-        <span className="mono-label">Saved form</span>
-        <h2 className="mt-2 text-base font-semibold text-[var(--ink)]">Payment details</h2>
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          <Detail label="Student" value={item.student?.name || 'Not available'} />
-          <Detail label="Email" value={item.student?.email || 'Not available'} />
-          <Detail label="University" value={item.universityName} />
-          <Detail label="Semester" value={item.semesterLabel || 'Semester 1'} />
-          <Detail label="Provider" value={item.providerName} />
-          <Detail label="Collection reference" value={item.collectionReference} />
-          <Detail label="Case ID" value={item.id} />
-          <Detail label="Current status" value={trackingLabel(item.status)} />
-          <Detail label="Last updated" value={new Date(updatedAt).toLocaleString()} />
+        <span className="mono-label">Saved payment</span>
+        <h2 className="mt-2 text-base font-semibold text-[var(--ink)]">Payment summary</h2>
+        <div className="mt-5 grid gap-4">
+          <section className="detail-section">
+            <div className="detail-section-title">Status</div>
+            <div className="summary-highlight">
+              <div>
+                <div className="summary-highlight-value">{trackingLabel(item.status)}</div>
+                <div className="summary-highlight-note">
+                  Last updated {new Date(updatedAt).toLocaleString()}
+                </div>
+              </div>
+              <span className={`status-badge ${statusClass(item.status)}`}>
+                {trackingLabel(item.status)}
+              </span>
+            </div>
+          </section>
+
+          <section className="detail-section">
+            <div className="detail-section-title">Student</div>
+            <div className="detail-grid">
+              <Detail label="Name" value={item.student?.name || 'Not available'} />
+              <Detail label="Email" value={item.student?.email || 'Not available'} />
+              <Detail label="University" value={item.universityName} />
+              <Detail label="Semester" value={item.semesterLabel || 'Semester 1'} />
+            </div>
+          </section>
+
+          <section className="detail-section">
+            <div className="detail-section-title">Payment reference</div>
+            <div className="detail-grid">
+              <Detail label="Provider" value={item.providerName} />
+              <Detail label="Collection" value={item.collectionReference} />
+              <CaseIdDetail id={item.id} />
+            </div>
+          </section>
         </div>
       </Card>
       <Card className="p-5 sm:p-6">
-        <span className="mono-label">Amount saved</span>
+        <span className="mono-label">Amount</span>
         <h2 className="mt-2 text-base font-semibold text-[var(--ink)]">University receives</h2>
         <div className="mt-4 rounded-xl border border-[var(--border)] bg-[rgba(32,32,32,0.015)] p-4">
-          <div className="mono-label">Target amount</div>
+          <div className="detail-section-title">Target amount</div>
           <div className="mt-1 text-2xl font-semibold text-[var(--ink)]">
             {formatMinor(item.targetAmountMinor, item.targetCurrency)}
           </div>
@@ -170,7 +191,7 @@ function PaymentDetailsPanel({ item }: { item: JourneyCase }) {
       </Card>
       <Card className="p-5 sm:p-6 lg:col-span-2">
         <span className="mono-label">Funding split</span>
-        <h2 className="mt-2 text-base font-semibold text-[var(--ink)]">Legs</h2>
+        <h2 className="mt-2 text-base font-semibold text-[var(--ink)]">Funding legs</h2>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           {item.fundingLegs.map((leg) => (
             <div
@@ -185,9 +206,7 @@ function PaymentDetailsPanel({ item }: { item: JourneyCase }) {
                   {formatMinor(leg.requiredMinor, 'INR')}
                 </span>
                 <span
-                  className={
-                    leg.funded ? 'font-semibold text-[var(--success)]' : 'text-[var(--warning)]'
-                  }
+                  className={`status-badge ${leg.funded ? 'status-success' : 'status-warning'}`}
                 >
                   {leg.funded ? 'Received' : 'Pending'}
                 </span>
@@ -203,9 +222,32 @@ function PaymentDetailsPanel({ item }: { item: JourneyCase }) {
 function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="mono-label">{label}</div>
+      <div className="detail-label">{label}</div>
       <div className="mt-1 break-words text-sm font-medium text-[var(--ink)]">
         {value.replaceAll('_', ' ')}
+      </div>
+    </div>
+  );
+}
+
+function CaseIdDetail({ id }: { id: string }) {
+  const display = `${id.slice(0, 8)}…${id.slice(-5)}`;
+  return (
+    <div>
+      <div className="detail-label">Case ID</div>
+      <div className="mt-1 flex items-center gap-2">
+        <span className="break-words font-mono text-sm font-medium text-[var(--ink)]" title={id}>
+          {display}
+        </span>
+        <button
+          type="button"
+          className="copy-icon-button"
+          aria-label="Copy case ID"
+          title="Copy case ID"
+          onClick={() => void navigator.clipboard.writeText(id)}
+        >
+          <span aria-hidden="true" />
+        </button>
       </div>
     </div>
   );
@@ -234,4 +276,15 @@ function trackingLabel(status: string): string {
   if (status === 'TRANSFERRING') return 'Bank transfer in progress';
   if (['COMPLETED', 'RECONCILED'].includes(status)) return 'Delivered to university';
   return STOPPED_LABELS[status] ?? status.replaceAll('_', ' ');
+}
+
+function etaLabel(item: JourneyCase): string {
+  if (Object.prototype.hasOwnProperty.call(STOPPED_LABELS, item.status)) return 'Attention needed';
+  if (['COMPLETED', 'RECONCILED'].includes(item.status)) return 'Delivered';
+  const base = item.lastUpdatedAt ?? item.instructionCreatedAt ?? item.createdAt;
+  const expected = new Date(new Date(base).getTime() + 72 * 60 * 60_000);
+  return `Expected by ${expected.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  })}`;
 }

@@ -1,39 +1,18 @@
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { DEMO_ACCOUNTS, DEMO_PASSWORD } from '../auth/demoAccounts';
 import { Button, Card, ErrorNote, Field, TextInput } from '../components/ui';
-
-const ACCOUNTS = [
-  {
-    label: 'Student',
-    email: 'student@tuitionflow.local',
-    description: 'Create and track tuition payments',
-  },
-  {
-    label: 'University finance',
-    email: 'finance-warwick@tuitionflow.local',
-    description: 'Track Warwick student payment initiations',
-  },
-  {
-    label: 'Lender officer',
-    email: 'lender@tuitionflow.local',
-    description: 'Approve sanctioned-loan disbursements',
-  },
-  {
-    label: 'Payment ops',
-    email: 'ops@tuitionflow.local',
-    description: 'Handle settlement operations and exceptions',
-  },
-];
 
 export function LoginScreen() {
   const auth = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState(ACCOUNTS[0]!.email);
-  const [password, setPassword] = useState('DemoPass123!');
+  const [email, setEmail] = useState(DEMO_ACCOUNTS[0]!.email);
+  const [password, setPassword] = useState(DEMO_PASSWORD);
   const [error, setError] = useState('');
   const [roleOpen, setRoleOpen] = useState(false);
-  const selectedAccount = ACCOUNTS.find((account) => account.email === email) ?? ACCOUNTS[0]!;
+  const selectedAccount =
+    DEMO_ACCOUNTS.find((account) => account.email === email) ?? DEMO_ACCOUNTS[0]!;
 
   if (auth.user) return <Navigate to="/dashboard" replace />;
 
@@ -84,7 +63,7 @@ export function LoginScreen() {
                       role="listbox"
                       className="absolute left-0 right-0 top-[calc(100%+8px)] z-20 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 shadow-[0_14px_32px_rgba(32,32,32,0.10)]"
                     >
-                      {ACCOUNTS.map((account) => (
+                      {DEMO_ACCOUNTS.map((account) => (
                         <button
                           key={account.email}
                           type="button"

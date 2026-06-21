@@ -1,4 +1,5 @@
 import { createContext, use, useMemo, useState, type ReactNode } from 'react';
+import { authenticateDemoAccount } from './demoAccounts';
 
 export type UserRole = 'STUDENT' | 'LENDER_OFFICER' | 'PAYMENT_OPS' | 'UNIVERSITY_FINANCE';
 export interface AuthUser {
@@ -17,6 +18,7 @@ interface AuthState {
 }
 
 const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
+const DATA_BACKEND = (import.meta.env.VITE_DATA_BACKEND as string | undefined) ?? 'firestore';
 const TOKEN_KEY = 'tf_token:v1';
 const USER_KEY = 'tf_user:v1';
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -34,6 +36,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       token,
       async login(email: string, password: string) {
+        if (DATA_BACKEND === 'firestore') {
+          const authenticated = authenticateDemoAccount(email, password);
+          const accessToken = `firestore:${authenticated.id}:${Date.now()}`;
+          sessionStorage.setItem(TOKEN_KEY, accessToken);
+          sessionStorage.setItem(USER_KEY, JSON.stringify(authenticated));
+          setToken(accessToken);
+          setUser(authenticated);
+          return;
+        }
         const response = await fetch(`${BASE}/api/auth/login`, {
           method: 'POST',
           credentials: 'include',
@@ -41,14 +52,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify({ email, password }),
         });
         if (!response.ok) throw new Error('Invalid email or password');
-        const body = (await response.json()) as { accessToken: string; user: AuthUser };
+        const body = (await jsonResponse(response)) as { accessToken: string; user: AuthUser };
         sessionStorage.setItem(TOKEN_KEY, body.accessToken);
         sessionStorage.setItem(USER_KEY, JSON.stringify(body.user));
         setToken(body.accessToken);
         setUser(body.user);
       },
       logout() {
-        void fetch(`${BASE}/api/auth/logout`, { method: 'POST', credentials: 'include' });
+        if (DATA_BACKEND !== 'firestore') {
+          void fetch(`${BASE}/api/auth/logout`, { method: 'POST', credentials: 'include' });
+        }
         sessionStorage.removeItem(TOKEN_KEY);
         sessionStorage.removeItem(USER_KEY);
         setToken(undefined);
@@ -58,6 +71,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [token, user],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+async function jsonResponse(response: Response): Promise<unknown> {
+  const contentType = response.headers.get('content-type') ?? '';
+  if (!contentType.includes('application/json')) {
+    throw new Error(
+      'API is not configured for this deployment. Set VITE_API_URL to the hosted API URL.',
+    );
+  }
+  return response.json();
 }
 
 export function useAuth(): AuthState {

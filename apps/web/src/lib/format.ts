@@ -1,7 +1,6 @@
 export function formatMinor(minor: string, currency: string): string {
   const major = Number(BigInt(minor)) / 100;
-  const locale = currency === 'INR' ? 'en-IN' : 'en-US';
-  return new Intl.NumberFormat(locale, {
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
     maximumFractionDigits: 2,

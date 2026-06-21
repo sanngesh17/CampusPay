@@ -23,3 +23,6 @@ Thumbs.db
 # prisma local artifacts
 **/*.db
 .data/
+
+# firebase local deploy cache
+.firebase/

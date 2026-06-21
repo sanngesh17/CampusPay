@@ -19,6 +19,8 @@
     "db:migrate": "cross-env DATABASE_URL=postgresql://tuitionflow:tuitionflow@localhost:5432/tuitionflow?schema=public pnpm --filter @tuitionflow/api exec prisma migrate deploy",
     "db:backup-restore-smoke": "powershell -NoProfile -ExecutionPolicy Bypass -File infra/backup-restore-smoke.ps1",
     "demo:full": "pnpm db:up && pnpm db:migrate && cross-env PERSISTENCE=prisma DATABASE_URL=postgresql://tuitionflow:tuitionflow@localhost:5432/tuitionflow?schema=public pnpm demo",
+    "firebase:seed": "node scripts/seed-firestore.mjs",
+    "firebase:deploy": "pnpm --filter @tuitionflow/web build && firebase deploy --only firestore:rules,hosting --project campuspay-xrpl",
     "prepare": "husky"
   },
   "devDependencies": {

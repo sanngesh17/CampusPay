@@ -71,15 +71,7 @@ export function JourneyDashboard() {
       />
     );
   }
-  return (
-    <OperationsDashboard
-      title={user.displayName}
-      search={search}
-      setSearch={setSearch}
-      cases={visible}
-      isLoading={isLoading}
-    />
-  );
+  return <OperationsDashboard title={user.displayName} cases={visible} isLoading={isLoading} />;
 }
 
 type DashboardAction = (run: () => Promise<JourneyCase>) => void;
@@ -235,39 +227,303 @@ function LenderOfficerDashboard({
 
 function OperationsDashboard({
   title,
-  search,
-  setSearch,
   cases,
   isLoading,
 }: {
   title: string;
-  search: string;
-  setSearch(value: string): void;
   cases: JourneyCase[];
   isLoading: boolean;
 }) {
+  const metrics = operationsMetrics(cases);
+  const actionRows = operationsPriorityRows(cases).slice(0, 4);
   return (
     <>
       <DashboardIntro
         eyebrow="Operations corridor"
-        title={`${title} dashboard`}
-        accent="rail control"
-        subtitle="Compliance, funding, payout and reconciliation queue."
+        title={`${title} control`}
+        accent="daily summary"
+        subtitle="Funding, payout, reconciliation, and exceptions at a glance."
+      />
+
+      <section className="ops-hero-card">
+        <div>
+          <span className="mono-label">Portfolio in motion</span>
+          <div className="ops-hero-value">{formatMinor(metrics.totalTargetMinor, 'GBP')}</div>
+          <p>
+            {metrics.totalCases} active payment records across {metrics.universityCount} partner
+            colleges.
+          </p>
+        </div>
+        <div className="ops-hero-side">
+          <span className="status-badge status-warning">
+            {metrics.awaitingFunds} awaiting funds
+          </span>
+          <span className="status-badge status-success">
+            {metrics.reconciliationRate}% reconciled
+          </span>
+        </div>
+      </section>
+
+      <section className="metrics-bar ops-metrics-bar">
+        <OpsMetricCard
+          index="01"
+          label="Funding queue"
+          value={metrics.awaitingFunds.toString()}
+          footer={`${formatMinor(metrics.awaitingFundingMinor, 'INR')} expected from lenders`}
+        />
+        <OpsMetricCard
+          index="02"
+          label="Funds received"
+          value={metrics.fundedCount.toString()}
+          footer={`${formatMinor(metrics.fundedMinor, 'INR')} ready or processing`}
+        />
+        <OpsMetricCard
+          index="03"
+          label="Payout pipeline"
+          value={metrics.payoutPipeline.toString()}
+          footer="Submitted, validating, or transferring"
+        />
+        <OpsMetricCard
+          index="04"
+          label="Exceptions"
+          value={metrics.attentionCount.toString()}
+          footer="Needs review, failed, cancelled, or refund pending"
+          tone={metrics.attentionCount > 0 ? 'warning' : 'success'}
+        />
+      </section>
+
+      <section className="ops-workbench">
+        <div className="ops-workbench-main">
+          <div className="ops-section-header">
+            <div>
+              <span className="mono-label">Action queue</span>
+              <h2>Priority transactions</h2>
+            </div>
+            <Link to="/operations/transactions" className="btn-secondary">
+              View all transactions &rarr;
+            </Link>
+          </div>
+          <div className="ops-priority-list">
+            {actionRows.map((item) => (
+              <Link key={item.id} to={`/payments/${item.id}`} className="ops-priority-row">
+                <div>
+                  <div className="cell-student">{item.collectionReference}</div>
+                  <span className="cell-email">
+                    {item.universityName} · {item.student?.name ?? item.semesterLabel}
+                  </span>
+                </div>
+                <div className="cell-amount">
+                  {formatMinor(item.targetAmountMinor, item.targetCurrency)}
+                </div>
+                <span className={`status-badge ${statusClass(item.status)}`}>
+                  {trackingLabel(item.status)}
+                </span>
+              </Link>
+            ))}
+            {isLoading ? (
+              <div className="empty-state !py-6">Loading operations queue...</div>
+            ) : null}
+            {!isLoading && actionRows.length === 0 ? (
+              <div className="empty-state !py-6">No transactions need attention.</div>
+            ) : null}
+          </div>
+        </div>
+        <aside className="ops-status-panel">
+          <span className="mono-label">Lifecycle mix</span>
+          <h2>Status distribution</h2>
+          <StatusBar
+            label="Awaiting funds"
+            count={metrics.awaitingFunds}
+            total={metrics.totalCases}
+          />
+          <StatusBar
+            label="Funded / processing"
+            count={metrics.processingCount}
+            total={metrics.totalCases}
+          />
+          <StatusBar label="Delivered" count={metrics.deliveredCount} total={metrics.totalCases} />
+          <StatusBar label="Attention" count={metrics.attentionCount} total={metrics.totalCases} />
+        </aside>
+      </section>
+    </>
+  );
+}
+
+export function OperationsTransactionsScreen() {
+  const { user } = useAuth();
+  const [search, setSearch] = useState('');
+  const { data: caseData, isLoading } = useQuery({
+    queryKey: ['journey-cases', user?.id, 'operations-transactions'],
+    queryFn: () => journeyApi.list(user!),
+    enabled: !!user && user.role === 'PAYMENT_OPS',
+    refetchInterval: 2500,
+  });
+
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role !== 'PAYMENT_OPS') return <Navigate to="/dashboard" replace />;
+
+  const queryText = search.toLowerCase();
+  const visible = (caseData ?? []).filter((item) =>
+    `${item.id} ${item.universityName} ${item.collectionReference} ${item.status} ${item.providerName} ${item.student?.name ?? ''} ${item.student?.email ?? ''} ${item.semesterLabel ?? ''}`
+      .toLowerCase()
+      .includes(queryText),
+  );
+
+  return (
+    <>
+      <DashboardIntro
+        eyebrow="Operations ledger"
+        title="Transaction"
+        accent="workbench"
+        subtitle="Search and inspect every payment record routed through CampusPay."
       />
       <div className="controls-row">
+        <Link to="/dashboard" className="btn-secondary">
+          &larr; Summary
+        </Link>
         <div className="search-wrapper">
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             aria-label="Search cases"
-            placeholder="Search case, reference, university or status..."
+            placeholder="Search case, reference, university, provider or status..."
             className="search-input"
           />
         </div>
       </div>
-      <PaymentList cases={cases} isLoading={isLoading} empty="No cases match this queue." />
+      <PaymentList cases={visible} isLoading={isLoading} empty="No cases match this queue." />
     </>
   );
+}
+
+function OpsMetricCard({
+  index,
+  label,
+  value,
+  footer,
+  tone = 'neutral',
+}: {
+  index: string;
+  label: string;
+  value: string;
+  footer: string;
+  tone?: 'neutral' | 'success' | 'warning';
+}) {
+  return (
+    <article className={`metric-card ops-metric-card ops-metric-${tone}`}>
+      <span className="metric-num-badge">{index}</span>
+      <div className="metric-label">{label}</div>
+      <div className="metric-value">{value}</div>
+      <div className="metric-footer">{footer}</div>
+    </article>
+  );
+}
+
+function StatusBar({ label, count, total }: { label: string; count: number; total: number }) {
+  const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
+  return (
+    <div className="status-bar">
+      <div className="status-bar-head">
+        <span>{label}</span>
+        <span>
+          {count} · {percentage}%
+        </span>
+      </div>
+      <div className="status-bar-track" aria-hidden="true">
+        <span className="status-bar-fill" style={{ width: `${percentage}%` }} />
+      </div>
+    </div>
+  );
+}
+
+interface OperationsMetrics {
+  totalCases: number;
+  universityCount: number;
+  totalTargetMinor: string;
+  awaitingFunds: number;
+  awaitingFundingMinor: string;
+  fundedCount: number;
+  fundedMinor: string;
+  payoutPipeline: number;
+  processingCount: number;
+  deliveredCount: number;
+  attentionCount: number;
+  reconciliationRate: number;
+}
+
+function operationsMetrics(cases: JourneyCase[]): OperationsMetrics {
+  const totalTarget = cases.reduce((sum, item) => sum + BigInt(item.targetAmountMinor), 0n);
+  const universities = new Set(cases.map((item) => item.universityName).filter(Boolean));
+  const awaiting = cases.filter((item) => item.status === 'FUNDING_PENDING');
+  const fundedStatuses = ['FUNDS_RECEIVED', 'PAYOUT_SUBMITTED', 'VALIDATING', 'TRANSFERRING'];
+  const delivered = cases.filter((item) => ['COMPLETED', 'RECONCILED'].includes(item.status));
+  const attention = cases.filter((item) => attentionStatuses.includes(item.status));
+  const payoutPipeline = cases.filter((item) =>
+    ['PAYOUT_SUBMITTED', 'VALIDATING', 'TRANSFERRING'].includes(item.status),
+  );
+  const processing = cases.filter((item) => fundedStatuses.includes(item.status));
+  const funded = cases.filter(
+    (item) => item.fundingLegs.some((leg) => leg.funded) || fundedStatuses.includes(item.status),
+  );
+  const awaitingFundingMinor = awaiting.reduce(
+    (sum, item) =>
+      sum +
+      item.fundingLegs.reduce((legSum, leg) => {
+        const required = BigInt(leg.requiredMinor);
+        const received = BigInt(leg.receivedMinor);
+        const outstanding = required > received ? required - received : 0n;
+        return legSum + outstanding;
+      }, 0n),
+    0n,
+  );
+  const fundedMinor = cases.reduce(
+    (sum, item) =>
+      sum +
+      item.fundingLegs.reduce((legSum, leg) => {
+        if (!leg.funded) return legSum;
+        return legSum + BigInt(leg.receivedMinor);
+      }, 0n),
+    0n,
+  );
+
+  return {
+    totalCases: cases.length,
+    universityCount: universities.size,
+    totalTargetMinor: totalTarget.toString(),
+    awaitingFunds: awaiting.length,
+    awaitingFundingMinor: awaitingFundingMinor.toString(),
+    fundedCount: funded.length,
+    fundedMinor: fundedMinor.toString(),
+    payoutPipeline: payoutPipeline.length,
+    processingCount: processing.length,
+    deliveredCount: delivered.length,
+    attentionCount: attention.length,
+    reconciliationRate: cases.length > 0 ? Math.round((delivered.length / cases.length) * 100) : 0,
+  };
+}
+
+function operationsPriorityRows(cases: JourneyCase[]): JourneyCase[] {
+  return [...cases].sort((left, right) => {
+    const priorityDelta = operationsPriority(left) - operationsPriority(right);
+    if (priorityDelta !== 0) return priorityDelta;
+    return updatedTime(right) - updatedTime(left);
+  });
+}
+
+function operationsPriority(item: JourneyCase): number {
+  if (attentionStatuses.includes(item.status)) return 0;
+  if (item.status === 'FUNDING_PENDING') return 1;
+  if (['FUNDS_RECEIVED', 'PAYOUT_SUBMITTED', 'VALIDATING', 'TRANSFERRING'].includes(item.status)) {
+    return 2;
+  }
+  if (['COMPLETED', 'RECONCILED'].includes(item.status)) return 4;
+  return 3;
+}
+
+function updatedTime(item: JourneyCase): number {
+  const value =
+    item.lastUpdatedAt ?? item.payment?.updatedAt ?? item.instructionCreatedAt ?? item.createdAt;
+  return new Date(value).getTime();
 }
 
 function DashboardIntro({
@@ -318,9 +574,12 @@ function PaymentListRow({ item, studentLabel }: { item: JourneyCase; studentLabe
   return (
     <Link to={`/payments/${item.id}`} className="list-row">
       <div className="cell-student">
-        {item.student?.name || studentLabel || item.universityName}
+        {studentLabel || item.student?.name || item.universityName}
         <span className="cell-email">
-          {item.student?.email || `${item.semesterLabel ?? 'Semester 1'} · ${item.id.slice(0, 8)}`}
+          {studentLabel
+            ? `${item.semesterLabel ?? studentLabel} · ${item.id.slice(0, 8)}`
+            : item.student?.email ||
+              `${item.semesterLabel ?? 'Semester 1'} · ${item.id.slice(0, 8)}`}
         </span>
       </div>
       <div className="cell-uni">
@@ -521,12 +780,6 @@ function LenderCaseRow({
 function semesterIndex(label: string): number {
   const match = /^Semester (\d+)$/.exec(label);
   return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
-}
-
-function updatedTime(item: JourneyCase): number {
-  return new Date(
-    item.lastUpdatedAt ?? item.payment?.updatedAt ?? item.instructionCreatedAt ?? item.createdAt,
-  ).getTime();
 }
 
 function lenderLeg(item: JourneyCase) {

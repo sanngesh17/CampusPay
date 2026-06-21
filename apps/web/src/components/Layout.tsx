@@ -31,6 +31,11 @@ export function Layout() {
                   New payment
                 </NavLink>
               ) : null}
+              {auth.user.role === 'PAYMENT_OPS' ? (
+                <NavLink to="/operations/transactions" className={navClass}>
+                  Transactions
+                </NavLink>
+              ) : null}
             </nav>
             <span className="hidden font-mono text-[10.5px] text-[var(--ink-faint)] md:inline">
               {auth.user.role.replaceAll('_', ' ')}
