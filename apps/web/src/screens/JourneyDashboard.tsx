@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { journeyApi, type JourneyCase } from '../api/journey';
 import { useAuth } from '../auth/AuthContext';
-import { Button, Card, ErrorNote, PageHeader, TextInput } from '../components/ui';
+import { Card, ErrorNote, TextInput } from '../components/ui';
 import { formatMinor } from '../lib/format';
-import { useState } from 'react';
 
 export function JourneyDashboard() {
   const { user } = useAuth();
@@ -25,26 +25,23 @@ export function JourneyDashboard() {
     },
     onError: (cause) => setError((cause as Error).message),
   });
+
   if (!user) return <Navigate to="/login" replace />;
-  const roleCopy =
-    user.role === 'STUDENT'
-      ? 'Your tuition payments and live partner status.'
-      : user.role === 'UNIVERSITY_FINANCE'
-        ? 'Student payment initiations routed to your college.'
-        : user.role === 'LENDER_OFFICER'
-          ? 'Sanctioned-loan disbursements assigned to your institution.'
-          : 'Compliance, funding, payout and reconciliation queue.';
+
   const queryText = search.toLowerCase();
   const visible = (caseData ?? []).filter((item) =>
-    `${item.id} ${item.universityName} ${item.collectionReference} ${item.status} ${item.providerName} ${item.student?.name ?? ''} ${item.student?.email ?? ''}`
+    `${item.id} ${item.universityName} ${item.collectionReference} ${item.status} ${item.providerName} ${item.student?.name ?? ''} ${item.student?.email ?? ''} ${item.semesterLabel ?? ''}`
       .toLowerCase()
       .includes(queryText),
   );
+
   if (user.role === 'STUDENT') {
     return (
       <StudentPaymentsDashboard
         studentName={user.displayName}
         universityName={user.universityName ?? 'University'}
+        search={search}
+        setSearch={setSearch}
         cases={visible}
         isLoading={isLoading}
       />
@@ -54,7 +51,6 @@ export function JourneyDashboard() {
     return (
       <UniversityFinanceDashboard
         universityName={user.universityName ?? 'University'}
-        subtitle={roleCopy}
         search={search}
         setSearch={setSearch}
         cases={visible}
@@ -66,7 +62,6 @@ export function JourneyDashboard() {
     return (
       <LenderOfficerDashboard
         title={user.displayName}
-        subtitle={roleCopy}
         search={search}
         setSearch={setSearch}
         cases={visible}
@@ -77,42 +72,13 @@ export function JourneyDashboard() {
     );
   }
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <PageHeader title={`${user.displayName} dashboard`} subtitle={roleCopy} />
-      </div>
-      <input
-        value={search}
-        onChange={(event) => setSearch(event.target.value)}
-        aria-label="Search cases"
-        placeholder="Search case, reference, university or status"
-        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-      />
-      <div className="grid gap-4">
-        {visible.map((item) => (
-          <Link key={item.id} to={`/payments/${item.id}`}>
-            <Card className="flex items-center justify-between gap-6 p-5 transition hover:border-brand-300">
-              <div>
-                <div className="font-semibold text-slate-900">{item.universityName}</div>
-                <div className="mt-1 font-mono text-xs text-slate-400">
-                  {item.collectionReference} · {item.id.slice(0, 8)}
-                </div>
-                <div className="mt-2 text-sm text-slate-500">
-                  {item.providerName} · {formatMinor(item.targetAmountMinor, item.targetCurrency)}
-                </div>
-              </div>
-              <div className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700">
-                {item.status.replaceAll('_', ' ')}
-              </div>
-            </Card>
-          </Link>
-        ))}
-        {isLoading ? <Card className="p-8 text-center text-slate-400">Loading cases…</Card> : null}
-        {!isLoading && visible.length === 0 ? (
-          <Card className="p-10 text-center text-slate-400">No cases match this queue.</Card>
-        ) : null}
-      </div>
-    </div>
+    <OperationsDashboard
+      title={user.displayName}
+      search={search}
+      setSearch={setSearch}
+      cases={visible}
+      isLoading={isLoading}
+    />
   );
 }
 
@@ -121,121 +87,101 @@ type DashboardAction = (run: () => Promise<JourneyCase>) => void;
 function StudentPaymentsDashboard({
   studentName,
   universityName,
+  search,
+  setSearch,
   cases,
   isLoading,
 }: {
   studentName: string;
   universityName: string;
+  search: string;
+  setSearch(value: string): void;
   cases: JourneyCase[];
   isLoading: boolean;
 }) {
   const groups = studentSemesterGroups(cases);
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-end sm:justify-between">
-        <PageHeader title={`${studentName} payments`} subtitle={universityName} />
-        <Link to="/payments/new">
-          <Button>New payment</Button>
+    <>
+      <DashboardIntro
+        eyebrow="Student corridor"
+        title={`${studentName} payments`}
+        accent={universityName}
+        subtitle="One university account with one live tuition payment per semester."
+      />
+      <div className="controls-row">
+        <div className="search-wrapper">
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            aria-label="Search payments"
+            placeholder="Search references, semester, provider or status..."
+            className="search-input"
+          />
+        </div>
+        <Link to="/payments/new" className="btn-primary">
+          New payment &rarr;
         </Link>
       </div>
       <div className="grid gap-4">
         {groups.map((group) => (
-          <section
-            key={group.semester}
-            className="overflow-hidden rounded-lg border border-slate-200 bg-white"
-          >
-            <div className="flex items-center justify-between gap-4 border-b border-slate-100 bg-slate-50 px-4 py-3">
-              <h2 className="font-semibold text-slate-950">{group.semester}</h2>
-              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
-                {group.cases.length}
-              </span>
+          <section key={group.semester} className="list-wrapper">
+            <div className="list-row !grid-cols-[1fr_auto] bg-[rgba(32,32,32,0.015)]">
+              <div className="cell-student">{group.semester}</div>
+              <span className="status-badge status-warning">{group.cases.length}</span>
             </div>
-            <div className="divide-y divide-slate-100">
-              {group.cases.map((item) => {
-                const updatedAt =
-                  item.lastUpdatedAt ??
-                  item.payment?.updatedAt ??
-                  item.instructionCreatedAt ??
-                  item.createdAt;
-                return (
-                  <Link
-                    key={item.id}
-                    to={`/payments/${item.id}`}
-                    className="grid gap-3 px-4 py-4 transition hover:bg-slate-50 md:grid-cols-[1fr_0.9fr_0.8fr_0.9fr] md:items-center md:gap-4"
-                  >
-                    <div>
-                      <div className="font-mono text-xs font-semibold text-slate-700">
-                        {item.collectionReference}
-                      </div>
-                      <div className="mt-1 text-sm text-slate-500">{item.id.slice(0, 8)}</div>
-                    </div>
-                    <div>
-                      <div className="font-semibold text-slate-900">
-                        {formatMinor(item.targetAmountMinor, item.targetCurrency)}
-                      </div>
-                      <div className="mt-1 text-sm text-slate-500">{item.providerName}</div>
-                    </div>
-                    <div>
-                      <span className="inline-flex rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700">
-                        {trackingLabel(item.status)}
-                      </span>
-                    </div>
-                    <div className="text-sm text-slate-500">
-                      {new Date(updatedAt).toLocaleString()}
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
+            {group.cases.map((item) => (
+              <PaymentListRow key={item.id} item={item} studentLabel={group.semester} />
+            ))}
           </section>
         ))}
-        {isLoading ? (
-          <Card className="p-8 text-center text-slate-400">Loading payments...</Card>
-        ) : null}
+        {isLoading ? <Card className="empty-state">Loading payments...</Card> : null}
         {!isLoading && cases.length === 0 ? (
-          <Card className="p-10 text-center text-slate-400">No payments for this student yet.</Card>
+          <Card className="empty-state">No payments match this queue.</Card>
         ) : null}
       </div>
-    </div>
+    </>
   );
 }
 
-function studentSemesterGroups(cases: JourneyCase[]) {
-  const groups = new Map<string, JourneyCase[]>();
-  for (const item of cases) {
-    const semester = item.semesterLabel || 'Semester 1';
-    groups.set(semester, [...(groups.get(semester) ?? []), item]);
-  }
-  return [...groups.entries()]
-    .sort(([left], [right]) => semesterIndex(left) - semesterIndex(right))
-    .map(([semester, items]) => ({
-      semester,
-      cases: items.sort(
-        (left, right) =>
-          new Date(
-            right.lastUpdatedAt ??
-              right.payment?.updatedAt ??
-              right.instructionCreatedAt ??
-              right.createdAt,
-          ).getTime() -
-          new Date(
-            left.lastUpdatedAt ??
-              left.payment?.updatedAt ??
-              left.instructionCreatedAt ??
-              left.createdAt,
-          ).getTime(),
-      ),
-    }));
-}
-
-function semesterIndex(label: string): number {
-  const match = /^Semester (\d+)$/.exec(label);
-  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+function UniversityFinanceDashboard({
+  universityName,
+  search,
+  setSearch,
+  cases,
+  isLoading,
+}: {
+  universityName: string;
+  search: string;
+  setSearch(value: string): void;
+  cases: JourneyCase[];
+  isLoading: boolean;
+}) {
+  return (
+    <>
+      <DashboardIntro
+        eyebrow="University corridor"
+        title={`${universityName} finance`}
+        accent="payment queue"
+        subtitle="Student payment initiations routed to this partner college."
+      />
+      <div className="controls-row">
+        <div className="search-wrapper">
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            aria-label="Search university payments"
+            placeholder="Search references, students or universities..."
+            className="search-input"
+          />
+        </div>
+      </div>
+      <PaymentList cases={cases} isLoading={isLoading} empty="No payments match this queue." />
+    </>
+  );
 }
 
 function LenderOfficerDashboard({
   title,
-  subtitle,
   search,
   setSearch,
   cases,
@@ -244,7 +190,6 @@ function LenderOfficerDashboard({
   action,
 }: {
   title: string;
-  subtitle: string;
   search: string;
   setSearch(value: string): void;
   cases: JourneyCase[];
@@ -254,31 +199,146 @@ function LenderOfficerDashboard({
 }) {
   const buckets = lenderBuckets(cases);
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-end sm:justify-between">
-        <PageHeader title={title} subtitle={subtitle} />
-        <div className="text-sm font-medium text-slate-500">{cases.length} assigned cases</div>
-      </div>
-      <ErrorNote message={error} />
-      <input
-        value={search}
-        onChange={(event) => setSearch(event.target.value)}
-        aria-label="Search lender cases"
-        placeholder="Search university, reference, status or provider"
-        className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+    <>
+      <DashboardIntro
+        eyebrow="SBI disbursement"
+        title={title}
+        accent="approval desk"
+        subtitle="Sanctioned-loan disbursements grouped by payment lifecycle."
       />
+      <ErrorNote message={error} />
+      <div className="controls-row">
+        <div className="search-wrapper">
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            aria-label="Search lender cases"
+            placeholder="Search university, reference, status or provider..."
+            className="search-input"
+          />
+        </div>
+      </div>
       <div className="grid gap-4">
         {buckets.map((bucket) => (
           <LenderBucketSection key={bucket.key} bucket={bucket} action={action} />
         ))}
-        {isLoading ? (
-          <Card className="p-8 text-center text-slate-400">Loading disbursement queue...</Card>
-        ) : null}
+        {isLoading ? <Card className="empty-state">Loading disbursement queue...</Card> : null}
         {!isLoading && cases.length === 0 ? (
-          <Card className="p-10 text-center text-slate-400">No cases match this queue.</Card>
+          <Card className="empty-state">No cases match this queue.</Card>
         ) : null}
       </div>
-    </div>
+    </>
+  );
+}
+
+function OperationsDashboard({
+  title,
+  search,
+  setSearch,
+  cases,
+  isLoading,
+}: {
+  title: string;
+  search: string;
+  setSearch(value: string): void;
+  cases: JourneyCase[];
+  isLoading: boolean;
+}) {
+  return (
+    <>
+      <DashboardIntro
+        eyebrow="Operations corridor"
+        title={`${title} dashboard`}
+        accent="rail control"
+        subtitle="Compliance, funding, payout and reconciliation queue."
+      />
+      <div className="controls-row">
+        <div className="search-wrapper">
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            aria-label="Search cases"
+            placeholder="Search case, reference, university or status..."
+            className="search-input"
+          />
+        </div>
+      </div>
+      <PaymentList cases={cases} isLoading={isLoading} empty="No cases match this queue." />
+    </>
+  );
+}
+
+function DashboardIntro({
+  eyebrow,
+  title,
+  accent,
+  subtitle,
+}: {
+  eyebrow: string;
+  title: string;
+  accent: string;
+  subtitle: string;
+}) {
+  return (
+    <header className="dashboard-header">
+      <span className="eyebrow">{eyebrow}</span>
+      <h1>
+        {title}, <span>{accent}</span>
+      </h1>
+      <p>{subtitle}</p>
+    </header>
+  );
+}
+
+function PaymentList({
+  cases,
+  isLoading,
+  empty,
+}: {
+  cases: JourneyCase[];
+  isLoading: boolean;
+  empty: string;
+}) {
+  return (
+    <main className="list-wrapper">
+      {cases.map((item) => (
+        <PaymentListRow key={item.id} item={item} />
+      ))}
+      {isLoading ? <div className="empty-state">Loading cases...</div> : null}
+      {!isLoading && cases.length === 0 ? <div className="empty-state">{empty}</div> : null}
+    </main>
+  );
+}
+
+function PaymentListRow({ item, studentLabel }: { item: JourneyCase; studentLabel?: string }) {
+  const updatedAt =
+    item.lastUpdatedAt ?? item.payment?.updatedAt ?? item.instructionCreatedAt ?? item.createdAt;
+  return (
+    <Link to={`/payments/${item.id}`} className="list-row">
+      <div className="cell-student">
+        {item.student?.name || studentLabel || item.universityName}
+        <span className="cell-email">
+          {item.student?.email || `${item.semesterLabel ?? 'Semester 1'} · ${item.id.slice(0, 8)}`}
+        </span>
+      </div>
+      <div className="cell-uni">
+        {item.universityName}
+        <span className="cell-ref">{item.collectionReference}</span>
+      </div>
+      <div className="cell-amount">
+        {formatMinor(item.targetAmountMinor, item.targetCurrency)}
+        <span className="cell-conv">{item.providerName}</span>
+      </div>
+      <div>
+        <span className={`status-badge ${statusClass(item.status)}`}>
+          {trackingLabel(item.status)}
+        </span>
+        <span className="cell-hash" title={item.id}>
+          CASE: {item.id.slice(0, 10)}...
+        </span>
+      </div>
+      <div className="cell-conv">{new Date(updatedAt).toLocaleString()}</div>
+    </Link>
   );
 }
 
@@ -338,16 +398,7 @@ function lenderBuckets(cases: JourneyCase[]): LenderBucket[] {
       key: 'attention',
       title: 'Attention / Closed',
       description: 'Cases that need changes, failed, expired, or are no longer active.',
-      cases: cases.filter((item) =>
-        [
-          'CHANGES_REQUESTED',
-          'REJECTED',
-          'EXPIRED',
-          'FAILED',
-          'CANCELLED',
-          'REFUND_PENDING',
-        ].includes(item.status),
-      ),
+      cases: cases.filter((item) => attentionStatuses.includes(item.status)),
     },
   ];
 }
@@ -360,24 +411,20 @@ function LenderBucketSection({
   action: DashboardAction;
 }) {
   return (
-    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-      <div className="flex items-start justify-between gap-4 border-b border-slate-100 bg-slate-50 px-4 py-3">
+    <section className="list-wrapper">
+      <div className="list-row !grid-cols-[1fr_auto] bg-[rgba(32,32,32,0.015)]">
         <div>
-          <h2 className="font-semibold text-slate-950">{bucket.title}</h2>
-          <p className="mt-1 text-sm text-slate-500">{bucket.description}</p>
+          <div className="cell-student">{bucket.title}</div>
+          <span className="cell-email">{bucket.description}</span>
         </div>
-        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
-          {bucket.cases.length}
-        </span>
+        <span className="status-badge status-warning">{bucket.cases.length}</span>
       </div>
       {bucket.cases.length > 0 ? (
-        <div className="divide-y divide-slate-100">
-          {bucket.cases.map((item) => (
-            <LenderCaseRow key={item.id} bucketKey={bucket.key} item={item} action={action} />
-          ))}
-        </div>
+        bucket.cases.map((item) => (
+          <LenderCaseRow key={item.id} bucketKey={bucket.key} item={item} action={action} />
+        ))
       ) : (
-        <div className="px-4 py-5 text-sm text-slate-400">No transactions in this category.</div>
+        <div className="empty-state !py-6">No transactions in this category.</div>
       )}
     </section>
   );
@@ -394,70 +441,74 @@ function LenderCaseRow({
 }) {
   const [reference, setReference] = useState('UTR-DEMO-2026-0001');
   const leg = lenderLeg(item);
-  const updatedAt =
-    item.lastUpdatedAt ?? item.payment?.updatedAt ?? item.instructionCreatedAt ?? item.createdAt;
   return (
-    <div className="grid gap-4 px-4 py-4 lg:grid-cols-[1.2fr_1fr_0.9fr] lg:items-center">
-      <Link to={`/payments/${item.id}`} className="min-w-0">
-        <div className="font-semibold text-slate-900">{item.universityName}</div>
-        <div className="mt-1 font-mono text-xs text-slate-400">
-          {item.collectionReference} · {item.id.slice(0, 8)}
-        </div>
-        <div className="mt-2 text-sm text-slate-500">
-          Updated {new Date(updatedAt).toLocaleString()}
-        </div>
+    <div className="list-row">
+      <Link to={`/payments/${item.id}`} className="cell-student">
+        {item.universityName}
+        <span className="cell-email">{item.collectionReference}</span>
       </Link>
-      <Link to={`/payments/${item.id}`} className="text-sm">
-        <div className="font-medium text-slate-900">{item.providerName}</div>
-        <div className="mt-1 text-slate-500">
-          University receives {formatMinor(item.targetAmountMinor, item.targetCurrency)}
-        </div>
-        <div className="mt-1 text-slate-500">
-          Lender amount {leg ? formatMinor(leg.requiredMinor, 'INR') : 'Not required'}
-        </div>
-        <span className="mt-2 inline-flex rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700">
-          {item.status.replaceAll('_', ' ')}
+      <Link to={`/payments/${item.id}`} className="cell-uni">
+        {item.providerName}
+        <span className="cell-ref">{item.id.slice(0, 8)}</span>
+      </Link>
+      <Link to={`/payments/${item.id}`} className="cell-amount">
+        {formatMinor(item.targetAmountMinor, item.targetCurrency)}
+        <span className="cell-conv">
+          Lender {leg ? formatMinor(leg.requiredMinor, 'INR') : 'Not required'}
         </span>
       </Link>
-      <div className="flex flex-wrap gap-2 lg:justify-end">
+      <div>
+        <span className={`status-badge ${statusClass(item.status)}`}>
+          {item.status.replaceAll('_', ' ')}
+        </span>
+      </div>
+      <div className="row-actions">
         {bucketKey === 'pending' ? (
           <>
-            <Button onClick={() => action(() => journeyApi.lenderDecision(item.id, 'APPROVE'))}>
-              Approve
-            </Button>
-            <Button
-              variant="secondary"
+            <button
+              className="btn-row-action primary"
+              type="button"
+              onClick={() => action(() => journeyApi.lenderDecision(item.id, 'APPROVE'))}
+            >
+              disburse leg
+            </button>
+            <button
+              className="btn-row-action"
+              type="button"
               onClick={() =>
                 action(() =>
                   journeyApi.lenderDecision(item.id, 'CHANGES', 'Updated loan evidence required'),
                 )
               }
             >
-              Request changes
-            </Button>
-            <Button
-              variant="secondary"
+              clarify
+            </button>
+            <button
+              className="btn-row-action"
+              type="button"
               onClick={() =>
                 action(() => journeyApi.lenderDecision(item.id, 'REJECT', 'Rejected by lender'))
               }
             >
-              Reject
-            </Button>
+              reject
+            </button>
           </>
         ) : null}
         {bucketKey === 'approved' ? (
-          <div className="grid w-full gap-2 sm:grid-cols-[1fr_auto] lg:max-w-md">
+          <div className="grid gap-2">
             <TextInput
               value={reference}
               onChange={(event) => setReference(event.target.value)}
               aria-label={`Transfer reference for ${item.collectionReference}`}
             />
-            <Button
+            <button
+              className="btn-row-action primary"
+              type="button"
               onClick={() => action(() => journeyApi.lenderFunding(item.id, reference))}
               disabled={reference.trim().length < 4}
             >
-              Record UTR
-            </Button>
+              record UTR
+            </button>
           </div>
         ) : null}
       </div>
@@ -465,87 +516,48 @@ function LenderCaseRow({
   );
 }
 
+function studentSemesterGroups(cases: JourneyCase[]) {
+  const groups = new Map<string, JourneyCase[]>();
+  for (const item of cases) {
+    const semester = item.semesterLabel || 'Semester 1';
+    groups.set(semester, [...(groups.get(semester) ?? []), item]);
+  }
+  return [...groups.entries()]
+    .sort(([left], [right]) => semesterIndex(left) - semesterIndex(right))
+    .map(([semester, items]) => ({
+      semester,
+      cases: items.sort((left, right) => updatedTime(right) - updatedTime(left)),
+    }));
+}
+
+function semesterIndex(label: string): number {
+  const match = /^Semester (\d+)$/.exec(label);
+  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+}
+
+function updatedTime(item: JourneyCase): number {
+  return new Date(
+    item.lastUpdatedAt ?? item.payment?.updatedAt ?? item.instructionCreatedAt ?? item.createdAt,
+  ).getTime();
+}
+
 function lenderLeg(item: JourneyCase) {
   return item.fundingLegs.find((leg) => leg.kind === 'LENDER');
 }
 
-function UniversityFinanceDashboard({
-  universityName,
-  subtitle,
-  search,
-  setSearch,
-  cases,
-  isLoading,
-}: {
-  universityName: string;
-  subtitle: string;
-  search: string;
-  setSearch(value: string): void;
-  cases: JourneyCase[];
-  isLoading: boolean;
-}) {
-  return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-end sm:justify-between">
-        <PageHeader title={`${universityName} finance`} subtitle={subtitle} />
-        <div className="text-sm font-medium text-slate-500">{cases.length} active payments</div>
-      </div>
-      <input
-        value={search}
-        onChange={(event) => setSearch(event.target.value)}
-        aria-label="Search university payments"
-        placeholder="Search student, email, reference, provider or status"
-        className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-      />
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-        <div className="grid grid-cols-[1.35fr_1fr_0.9fr_0.9fr] gap-4 border-b border-slate-100 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 max-md:hidden">
-          <div>Student</div>
-          <div>Reference</div>
-          <div>Tracking</div>
-          <div>Updated</div>
-        </div>
-        {cases.map((item) => (
-          <Link
-            key={item.id}
-            to={`/payments/${item.id}`}
-            className="grid gap-3 border-b border-slate-100 px-4 py-4 transition last:border-b-0 hover:bg-slate-50 md:grid-cols-[1.35fr_1fr_0.9fr_0.9fr] md:items-center md:gap-4"
-          >
-            <div>
-              <div className="font-semibold text-slate-900">{item.student?.name || 'Student'}</div>
-              <div className="mt-0.5 text-sm text-slate-500">{item.student?.email}</div>
-            </div>
-            <div>
-              <div className="font-mono text-xs font-semibold text-slate-700">
-                {item.collectionReference}
-              </div>
-              <div className="mt-1 text-sm text-slate-500">
-                {formatMinor(item.targetAmountMinor, item.targetCurrency)} · {item.providerName}
-              </div>
-            </div>
-            <div>
-              <span className="inline-flex rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700">
-                {trackingLabel(item.status)}
-              </span>
-            </div>
-            <div className="text-sm text-slate-500">
-              {new Date(
-                item.lastUpdatedAt ??
-                  item.payment?.updatedAt ??
-                  item.instructionCreatedAt ??
-                  item.createdAt,
-              ).toLocaleString()}
-            </div>
-          </Link>
-        ))}
-        {isLoading ? (
-          <div className="p-8 text-center text-slate-400">Loading payments...</div>
-        ) : null}
-        {!isLoading && cases.length === 0 ? (
-          <div className="p-10 text-center text-slate-400">No payments match this queue.</div>
-        ) : null}
-      </div>
-    </div>
-  );
+const attentionStatuses = [
+  'CHANGES_REQUESTED',
+  'REJECTED',
+  'EXPIRED',
+  'FAILED',
+  'CANCELLED',
+  'REFUND_PENDING',
+];
+
+function statusClass(status: string): string {
+  if (['COMPLETED', 'RECONCILED'].includes(status)) return 'status-success';
+  if (attentionStatuses.includes(status)) return 'status-error';
+  return 'status-warning';
 }
 
 function trackingLabel(status: string): string {
@@ -554,8 +566,8 @@ function trackingLabel(status: string): string {
   if (status === 'FUNDS_RECEIVED') return 'Funds received';
   if (['PAYOUT_SUBMITTED', 'VALIDATING'].includes(status)) return 'Payout submitted';
   if (status === 'TRANSFERRING') return 'Bank transfer in progress';
-  if (['COMPLETED', 'RECONCILED'].includes(status)) return 'Delivered to university';
-  if (status === 'CHANGES_REQUESTED') return 'Needs attention';
-  if (status === 'REFUND_PENDING') return 'Refund pending';
+  if (['COMPLETED', 'RECONCILED'].includes(status)) return 'Delivered';
+  if (status === 'CHANGES_REQUESTED') return 'Review';
+  if (status === 'REFUND_PENDING') return 'Refund';
   return status.replaceAll('_', ' ').toLowerCase();
 }

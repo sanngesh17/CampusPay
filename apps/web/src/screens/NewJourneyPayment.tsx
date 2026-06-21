@@ -200,7 +200,7 @@ export function NewJourneyPayment() {
             : requiredDetails(details) && !!evidence && accepted;
 
   return (
-    <div className="space-y-7">
+    <>
       <WizardHeader step={step} />
       <div className="grid gap-7 lg:grid-cols-[1fr_300px]">
         <Card className="overflow-hidden">
@@ -228,7 +228,7 @@ export function NewJourneyPayment() {
 
             <ErrorNote message={create.error ? (create.error as Error).message : undefined} />
 
-            <div className="mt-8 flex items-center justify-between border-t border-slate-100 pt-6">
+            <div className="mt-8 flex items-center justify-between border-t pt-6 divider">
               <Button
                 variant="ghost"
                 onClick={() => setStep((current) => Math.max(1, current - 1))}
@@ -266,42 +266,48 @@ export function NewJourneyPayment() {
           provider={selectedProvider?.name}
         />
       </div>
-    </div>
+    </>
   );
 }
 
 function WizardHeader({ step }: { step: number }) {
   return (
-    <div>
-      <div className="text-xs font-bold uppercase tracking-[0.2em] text-brand-600">
-        Make a payment
-      </div>
+    <header className="dashboard-header">
+      <span className="eyebrow">Make a payment</span>
+      <h1>
+        Generate tuition, <span>semester scoped.</span>
+      </h1>
+      <p>One saved payment request per university semester.</p>
       <div className="mt-4 grid grid-cols-5 gap-2">
         {STEP_LABELS.map((label, index) => (
           <div key={label}>
             <div
-              className={`h-1.5 rounded-full ${index + 1 <= step ? 'bg-brand-600' : 'bg-slate-200'}`}
+              className={`h-1.5 rounded-full ${
+                index + 1 <= step ? 'bg-[var(--accent)]' : 'bg-[var(--border)]'
+              }`}
             />
             <div
-              className={`mt-2 hidden text-xs md:block ${index + 1 === step ? 'font-semibold text-slate-800' : 'text-slate-400'}`}
+              className={`mt-2 hidden font-mono text-[11px] md:block ${
+                index + 1 === step ? 'font-semibold text-[var(--ink)]' : 'text-[var(--ink-faint)]'
+              }`}
             >
               {index + 1}. {label}
             </div>
           </div>
         ))}
       </div>
-    </div>
+    </header>
   );
 }
 
 function SectionTitle({ eyebrow, title, copy }: { eyebrow: string; title: string; copy: string }) {
   return (
     <div className="mb-7">
-      <div className="text-xs font-semibold uppercase tracking-wider text-brand-600">{eyebrow}</div>
-      <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900 md:text-3xl">
+      <div className="mono-label">{eyebrow}</div>
+      <h1 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-[var(--ink)] md:text-3xl">
         {title}
       </h1>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{copy}</p>
+      <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--ink-soft)]">{copy}</p>
     </div>
   );
 }
@@ -327,11 +333,9 @@ function UniversityStep({
           <option>United Kingdom</option>
         </Select>
       </Field>
-      <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
-        <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-          Institution
-        </div>
-        <div className="mt-1 text-lg font-semibold text-slate-900">{universityName}</div>
+      <div className="my-5 rounded-xl border border-[var(--border)] bg-[rgba(32,32,32,0.015)] p-4">
+        <div className="mono-label">Institution</div>
+        <div className="mt-1 text-lg font-semibold text-[var(--ink)]">{universityName}</div>
       </div>
       <Field label="Semester">
         <Select
@@ -367,15 +371,15 @@ function PaymentStep({
         {FEE_FIELDS.map(([key, label]) => (
           <label
             key={key}
-            className="flex items-center rounded-xl border border-slate-200 bg-white focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100"
+            className="flex items-center rounded-xl border border-[var(--border)] bg-[var(--surface)] focus-within:border-[var(--accent)]"
           >
-            <span className="border-r border-slate-200 px-4 py-4 font-semibold text-slate-500">
+            <span className="border-r border-[var(--border)] px-4 py-4 font-semibold text-[var(--ink-soft)]">
               £
             </span>
             <span className="flex-1 px-4">
-              <span className="block text-xs text-slate-500">{label}</span>
+              <span className="block text-xs text-[var(--ink-soft)]">{label}</span>
               <input
-                className="mt-1 w-full border-0 bg-transparent text-lg font-semibold outline-none"
+                className="mt-1 w-full border-0 bg-transparent text-lg font-semibold text-[var(--ink)] outline-none"
                 inputMode="decimal"
                 value={fees[key]}
                 onChange={(event) =>
@@ -388,8 +392,8 @@ function PaymentStep({
         ))}
       </div>
 
-      <div className="mt-6 flex items-center justify-between rounded-2xl bg-slate-900 px-6 py-5 text-white">
-        <span className="text-sm text-slate-300">University receives</span>
+      <div className="mt-6 flex items-center justify-between rounded-2xl bg-[var(--ink)] px-6 py-5 text-[var(--bg)]">
+        <span className="text-sm text-[var(--border)]">University receives</span>
         <span className="text-2xl font-semibold">{formatCurrency(total, 'GBP')}</span>
       </div>
 
@@ -410,24 +414,22 @@ function FundingStep() {
         title="How is this payment funded?"
         copy="The first release supports disbursement from an existing, fully sanctioned education loan."
       />
-      <div className="rounded-2xl border-2 border-brand-500 bg-brand-50 p-7">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-600 text-xl text-white">
+      <div className="rounded-2xl border-2 border-[var(--accent)] bg-[var(--accent-bg)] p-7">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--accent)] text-xl text-white">
           ₹
         </div>
-        <h2 className="mt-5 text-xl font-semibold">Full loan financing</h2>
-        <p className="mt-2 max-w-md text-sm leading-6 text-slate-600">
+        <h2 className="mt-5 text-xl font-semibold text-[var(--ink)]">Full loan financing</h2>
+        <p className="mt-2 max-w-md text-sm leading-6 text-[var(--ink-soft)]">
           Your approved loan provider funds the full payment. TuitionFlow does not originate,
           underwrite, or sanction the loan.
         </p>
-        <div className="mt-5 inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-          Available
-        </div>
+        <div className="status-badge status-success mt-5">Available</div>
       </div>
       <div className="mt-4 grid grid-cols-3 gap-3 opacity-50">
         {['Partial loan + savings', 'Self-funded', 'Cards / other'].map((label) => (
           <div
             key={label}
-            className="rounded-xl border border-slate-200 p-4 text-center text-xs text-slate-500"
+            className="rounded-xl border border-[var(--border)] p-4 text-center text-xs text-[var(--ink-soft)]"
           >
             {label}
             <div className="mt-2 font-semibold">Coming later</div>
@@ -453,15 +455,19 @@ function ProviderStep({ value, onChange }: { value: string; onChange(value: stri
             key={item.id}
             data-testid={`provider-${item.id}`}
             onClick={() => onChange(item.id)}
-            className={`rounded-2xl border p-5 text-left transition ${value === item.id ? 'border-brand-500 bg-brand-50 ring-2 ring-brand-100' : 'border-slate-200 hover:border-brand-200'}`}
+            className={`rounded-2xl border p-5 text-left transition ${
+              value === item.id
+                ? 'border-[var(--accent)] bg-[var(--accent-bg)]'
+                : 'border-[var(--border)] bg-[var(--surface)] hover:border-[var(--accent)]'
+            }`}
           >
             <span
-              className={`inline-flex rounded-lg px-3 py-2 text-xs font-black tracking-wide text-white ${item.color}`}
+              className={`inline-flex rounded-full px-3 py-2 text-xs font-black tracking-wide text-white ${item.color}`}
             >
               {item.mark}
             </span>
-            <span className="mt-5 block font-semibold text-slate-800">{item.name}</span>
-            <span className="mt-1 block text-xs text-slate-400">
+            <span className="mt-5 block font-semibold text-[var(--ink)]">{item.name}</span>
+            <span className="mt-1 block text-xs text-[var(--ink-soft)]">
               {item.kind === 'BANK' ? 'Indian bank' : 'Education finance NBFC'}
             </span>
           </button>
@@ -516,9 +522,9 @@ function DetailsStep({
         {input('state', 'State', false)}
       </div>
 
-      <div className="my-7 border-t border-slate-100" />
+      <div className="my-7 border-t divider" />
 
-      <h2 className="mb-4 font-semibold">Approved loan</h2>
+      <h2 className="mb-4 font-semibold text-[var(--ink)]">Approved loan</h2>
       <div className="grid gap-4 md:grid-cols-2">
         {input('branch', 'RACPC / loan centre')}
         {input('loanAccount', 'Loan account number')}
@@ -537,9 +543,9 @@ function DetailsStep({
         {input('pan', 'PAN of payer')}
       </div>
 
-      <label className="mt-6 block rounded-xl border-2 border-dashed border-slate-200 p-5 text-center text-sm text-slate-500">
+      <label className="mt-6 block rounded-xl border-2 border-dashed border-[var(--border)] p-5 text-center text-sm text-[var(--ink-soft)]">
         {evidence ? (
-          <span className="font-semibold text-emerald-700">Attached: {evidence.name}</span>
+          <span className="font-semibold text-[var(--success)]">Attached: {evidence.name}</span>
         ) : (
           'Attach the loan sanction letter (PDF, JPG or PNG)'
         )}
@@ -553,7 +559,7 @@ function DetailsStep({
 
       <button
         type="button"
-        className="mt-3 text-sm font-semibold text-brand-700 underline decoration-brand-200 underline-offset-4"
+        className="mt-3 text-sm font-semibold text-[var(--accent)] underline decoration-[var(--accent)]/30 underline-offset-4"
         onClick={() =>
           setEvidence(
             new File(
@@ -567,12 +573,12 @@ function DetailsStep({
         Use synthetic demo evidence
       </button>
 
-      <label className="mt-5 flex items-start gap-3 text-sm text-slate-600">
+      <label className="mt-5 flex items-start gap-3 text-sm text-[var(--ink-soft)]">
         <input
           type="checkbox"
           checked={accepted}
           onChange={(event) => setAccepted(event.target.checked)}
-          className="mt-1 h-4 w-4 accent-brand-600"
+          className="mt-1 h-4 w-4 accent-[var(--accent)]"
         />
         <span>
           I confirm this is an existing sanctioned education loan and consent to the stated
@@ -598,8 +604,10 @@ function PaymentSummary({
 }) {
   return (
     <Card className="h-fit overflow-hidden lg:sticky lg:top-24">
-      <div className="bg-slate-900 p-5 text-white">
-        <div className="text-xs uppercase tracking-widest text-brand-200">Payment summary</div>
+      <div className="bg-[var(--ink)] p-5 text-[var(--bg)]">
+        <div className="font-mono text-xs uppercase tracking-widest text-[var(--border)]">
+          Payment summary
+        </div>
         <div className="mt-3 text-lg font-semibold">{institution || 'Select an institution'}</div>
       </div>
 
@@ -610,7 +618,7 @@ function PaymentSummary({
         <SummaryRow label="Origin" value="India" />
         <SummaryRow label="Funding" value="Full education loan" />
         <SummaryRow label="Provider" value={provider ?? 'Not selected'} />
-        <div className="rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-800">
+        <div className="rounded-xl bg-[var(--warning-bg)] p-3 text-xs leading-5 text-[var(--warning)]">
           Final FX, tax and eligibility are supplied by the authorised partner before payout.
         </div>
       </div>
@@ -621,8 +629,8 @@ function PaymentSummary({
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start justify-between gap-3">
-      <span className="text-slate-400">{label}</span>
-      <span className="text-right font-medium text-slate-700">{value}</span>
+      <span className="text-[var(--ink-soft)]">{label}</span>
+      <span className="text-right font-medium text-[var(--ink)]">{value}</span>
     </div>
   );
 }

@@ -18,7 +18,7 @@ export function JourneyCaseScreen() {
   if (!user) return <Navigate to="/login" replace />;
 
   return (
-    <div className="space-y-5">
+    <>
       <ErrorNote message={(queryError as Error | null)?.message} />
       {item ? (
         <>
@@ -26,9 +26,9 @@ export function JourneyCaseScreen() {
           <PaymentDetailsPanel item={item} />
         </>
       ) : (
-        <Card className="p-8 text-center text-slate-400">Loading payment tracking...</Card>
+        <Card className="empty-state">Loading payment tracking...</Card>
       )}
-    </div>
+    </>
   );
 }
 
@@ -60,22 +60,21 @@ const STOPPED_LABELS: Record<string, string> = {
 
 function PaymentTrackingPanel({ item }: { item: JourneyCase }) {
   return (
-    <Card className="overflow-hidden p-0">
-      <div className="border-b border-slate-100 bg-slate-50 px-5 py-4 sm:px-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-slate-950">Payment tracking</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              {item.collectionReference} · {item.universityName}
-            </p>
-          </div>
-          <span className="w-fit rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700">
-            {trackingLabel(item.status)}
+    <section className="list-wrapper">
+      <div className="list-row !grid-cols-[1fr_auto] bg-[rgba(32,32,32,0.015)]">
+        <div>
+          <span className="eyebrow !justify-start">Payment processing</span>
+          <div className="cell-student text-[24px] leading-tight">Payment tracking</div>
+          <span className="cell-email">
+            {item.collectionReference} · {item.universityName}
           </span>
         </div>
+        <span className={`status-badge ${statusClass(item.status)}`}>
+          {trackingLabel(item.status)}
+        </span>
       </div>
       <PaymentTrackingTimeline status={item.status} />
-    </Card>
+    </section>
   );
 }
 
@@ -97,23 +96,27 @@ function PaymentTrackingTimeline({ status }: { status: string }) {
               <div
                 className={`flex h-7 w-7 items-center justify-center rounded-full border text-xs font-bold ${
                   current
-                    ? 'border-brand-600 bg-brand-600 text-white'
+                    ? 'border-[var(--accent)] bg-[var(--accent)] text-white'
                     : complete
-                      ? 'border-emerald-600 bg-emerald-600 text-white'
-                      : 'border-slate-200 bg-white text-slate-300'
+                      ? 'border-[var(--success)] bg-[var(--success)] text-white'
+                      : 'border-[var(--border)] bg-[var(--surface)] text-[var(--ink-faint)]'
                 }`}
               >
                 {complete ? '✓' : index + 1}
               </div>
               {index < TRACKING_STEPS.length - 1 ? (
-                <div className={`h-12 w-px ${complete ? 'bg-emerald-500' : 'bg-slate-200'}`} />
+                <div
+                  className={`h-12 w-px ${complete ? 'bg-[var(--success)]' : 'bg-[var(--border)]'}`}
+                />
               ) : null}
             </div>
             <div className="pb-7">
-              <div className={`font-semibold ${reached ? 'text-slate-900' : 'text-slate-400'}`}>
+              <div
+                className={`font-semibold ${reached ? 'text-[var(--ink)]' : 'text-[var(--ink-faint)]'}`}
+              >
                 {step.label}
               </div>
-              <div className="mt-1 text-sm text-slate-500">
+              <div className="mt-1 text-sm text-[var(--ink-soft)]">
                 {current ? 'Current payment location' : complete ? 'Completed' : 'Pending'}
               </div>
             </div>
@@ -121,7 +124,7 @@ function PaymentTrackingTimeline({ status }: { status: string }) {
         );
       })}
       {stopped ? (
-        <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-900">
+        <div className="mt-2 rounded-xl border border-[rgba(217,119,6,0.18)] bg-[var(--warning-bg)] p-4 text-sm font-medium text-[var(--warning)]">
           {stopped}
         </div>
       ) : null}
@@ -135,7 +138,8 @@ function PaymentDetailsPanel({ item }: { item: JourneyCase }) {
   return (
     <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
       <Card className="p-5 sm:p-6">
-        <h2 className="text-base font-semibold text-slate-950">Payment details</h2>
+        <span className="mono-label">Saved form</span>
+        <h2 className="mt-2 text-base font-semibold text-[var(--ink)]">Payment details</h2>
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <Detail label="Student" value={item.student?.name || 'Not available'} />
           <Detail label="Email" value={item.student?.email || 'Not available'} />
@@ -149,12 +153,11 @@ function PaymentDetailsPanel({ item }: { item: JourneyCase }) {
         </div>
       </Card>
       <Card className="p-5 sm:p-6">
-        <h2 className="text-base font-semibold text-slate-950">Amount saved</h2>
-        <div className="mt-4 rounded-lg bg-slate-50 p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            University receives
-          </div>
-          <div className="mt-1 text-2xl font-semibold text-slate-950">
+        <span className="mono-label">Amount saved</span>
+        <h2 className="mt-2 text-base font-semibold text-[var(--ink)]">University receives</h2>
+        <div className="mt-4 rounded-xl border border-[var(--border)] bg-[rgba(32,32,32,0.015)] p-4">
+          <div className="mono-label">Target amount</div>
+          <div className="mt-1 text-2xl font-semibold text-[var(--ink)]">
             {formatMinor(item.targetAmountMinor, item.targetCurrency)}
           </div>
         </div>
@@ -166,16 +169,26 @@ function PaymentDetailsPanel({ item }: { item: JourneyCase }) {
         </div>
       </Card>
       <Card className="p-5 sm:p-6 lg:col-span-2">
-        <h2 className="text-base font-semibold text-slate-950">Funding split</h2>
+        <span className="mono-label">Funding split</span>
+        <h2 className="mt-2 text-base font-semibold text-[var(--ink)]">Legs</h2>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           {item.fundingLegs.map((leg) => (
-            <div key={leg.kind} className="rounded-lg border border-slate-200 bg-white p-4">
-              <div className="text-sm font-semibold text-slate-900">
+            <div
+              key={leg.kind}
+              className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4"
+            >
+              <div className="text-sm font-semibold text-[var(--ink)]">
                 {leg.kind === 'LENDER' ? 'Sanctioned loan disbursement' : 'Student savings'}
               </div>
               <div className="mt-2 flex items-center justify-between gap-4 text-sm">
-                <span className="text-slate-500">{formatMinor(leg.requiredMinor, 'INR')}</span>
-                <span className={leg.funded ? 'font-semibold text-emerald-600' : 'text-amber-600'}>
+                <span className="text-[var(--ink-soft)]">
+                  {formatMinor(leg.requiredMinor, 'INR')}
+                </span>
+                <span
+                  className={
+                    leg.funded ? 'font-semibold text-[var(--success)]' : 'text-[var(--warning)]'
+                  }
+                >
                   {leg.funded ? 'Received' : 'Pending'}
                 </span>
               </div>
@@ -190,8 +203,8 @@ function PaymentDetailsPanel({ item }: { item: JourneyCase }) {
 function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</div>
-      <div className="mt-1 break-words text-sm font-medium text-slate-900">
+      <div className="mono-label">{label}</div>
+      <div className="mt-1 break-words text-sm font-medium text-[var(--ink)]">
         {value.replaceAll('_', ' ')}
       </div>
     </div>
@@ -201,10 +214,16 @@ function Detail({ label, value }: { label: string; value: string }) {
 function AmountRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-4 text-sm">
-      <span className="text-slate-500">{label}</span>
-      <span className="font-semibold text-slate-900">{formatMinor(value, 'INR')}</span>
+      <span className="text-[var(--ink-soft)]">{label}</span>
+      <span className="font-semibold text-[var(--ink)]">{formatMinor(value, 'INR')}</span>
     </div>
   );
+}
+
+function statusClass(status: string): string {
+  if (['COMPLETED', 'RECONCILED'].includes(status)) return 'status-success';
+  if (Object.prototype.hasOwnProperty.call(STOPPED_LABELS, status)) return 'status-error';
+  return 'status-warning';
 }
 
 function trackingLabel(status: string): string {
