@@ -32,6 +32,8 @@ export function LoginScreen() {
   const [email, setEmail] = useState(ACCOUNTS[0]!.email);
   const [password, setPassword] = useState('DemoPass123!');
   const [error, setError] = useState('');
+  const [roleOpen, setRoleOpen] = useState(false);
+  const selectedAccount = ACCOUNTS.find((account) => account.email === email) ?? ACCOUNTS[0]!;
 
   if (auth.user) return <Navigate to="/dashboard" replace />;
 
@@ -47,43 +49,67 @@ export function LoginScreen() {
 
   return (
     <>
-      <header className="dashboard-header">
-        <span className="eyebrow">Attention-Anchored Payments</span>
+      <header className="login-header">
+        <span className="eyebrow">Secure sign-in</span>
         <h1>
-          Decentralized tuition, <span>sponsor funded.</span>
+          Sign in to <span>CampusPay</span>
         </h1>
-        <p>Offset transaction fees while payment corridors process on-chain.</p>
+        <p>Access your payment workspace.</p>
       </header>
 
-      <Card className="p-5 sm:p-6">
-        <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+      <Card className="mx-auto w-full max-w-[460px] p-5 sm:p-6">
+        <div className="grid gap-6">
           <div>
-            <span className="mono-label">Demo login</span>
-            <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-[var(--ink)]">
-              Sign in to continue
+            <h2 className="text-2xl font-semibold tracking-[-0.04em] text-[var(--ink)]">
+              Choose account
             </h2>
             <p className="mt-2 text-sm leading-6 text-[var(--ink-soft)]">
-              Pick a role and jump into the education-payment flow.
+              Select the account type for this environment.
             </p>
-            <div className="mt-5 grid gap-3">
-              {ACCOUNTS.map((account) => (
-                <button
-                  type="button"
-                  key={account.email}
-                  onClick={() => setEmail(account.email)}
-                  className={`list-row !grid-cols-[1fr_auto] !rounded-xl border text-left ${
-                    email === account.email
-                      ? 'border-[var(--accent)] bg-[var(--accent-bg)]'
-                      : 'border-[var(--border)] bg-[var(--surface)]'
-                  }`}
-                >
-                  <div className="cell-student">
-                    {account.label}
-                    <span className="cell-email">{account.description}</span>
-                  </div>
-                  <span className="cell-ref">{account.email.split('@')[0]}</span>
-                </button>
-              ))}
+            <div className="mt-5">
+              <Field label="Sign in as">
+                <div className="relative">
+                  <button
+                    type="button"
+                    aria-haspopup="listbox"
+                    aria-expanded={roleOpen}
+                    className="tf-input flex items-center justify-between text-left"
+                    onClick={() => setRoleOpen((current) => !current)}
+                  >
+                    <span>{selectedAccount.label}</span>
+                    <span className="font-mono text-[11px] text-[var(--ink-faint)]">⌄</span>
+                  </button>
+                  {roleOpen ? (
+                    <div
+                      role="listbox"
+                      className="absolute left-0 right-0 top-[calc(100%+8px)] z-20 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 shadow-[0_14px_32px_rgba(32,32,32,0.10)]"
+                    >
+                      {ACCOUNTS.map((account) => (
+                        <button
+                          key={account.email}
+                          type="button"
+                          role="option"
+                          aria-selected={account.email === email}
+                          className={`flex w-full items-center justify-between rounded-lg px-4 py-3 text-left text-sm font-semibold transition ${
+                            account.email === email
+                              ? 'bg-[var(--accent-bg)] text-[var(--accent)]'
+                              : 'text-[var(--ink)] hover:bg-[rgba(32,32,32,0.03)]'
+                          }`}
+                          onClick={() => {
+                            setEmail(account.email);
+                            setRoleOpen(false);
+                          }}
+                        >
+                          <span>{account.label}</span>
+                          {account.email === email ? (
+                            <span className="font-mono text-[11px]">selected</span>
+                          ) : null}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </Field>
             </div>
           </div>
           <div className="space-y-4">

@@ -10,7 +10,7 @@ export function OnboardingScreen() {
       <Stepper current={0} />
       <PageHeader
         title="Pay your tuition, the simple way"
-        subtitle="KYC is pre-verified for these demo students. Pick one to begin."
+        subtitle="KYC is pre-verified for these students. Pick one to begin."
       />
       <div className="grid gap-4 sm:grid-cols-2">
         {STUDENTS.map((s) => (

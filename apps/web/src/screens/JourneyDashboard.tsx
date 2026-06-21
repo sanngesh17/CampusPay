@@ -439,7 +439,7 @@ function LenderCaseRow({
   item: JourneyCase;
   action: DashboardAction;
 }) {
-  const [reference, setReference] = useState('UTR-DEMO-2026-0001');
+  const [reference, setReference] = useState('UTR-2026-0001');
   const leg = lenderLeg(item);
   return (
     <div className="list-row">

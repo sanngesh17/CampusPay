@@ -41,7 +41,12 @@ export function Layout() {
           </div>
         ) : (
           <div className="role-switches">
-            <span className="role-btn active">Login</span>
+            <NavLink to="/" className={navClass}>
+              Home
+            </NavLink>
+            <NavLink to="/login" className={navClass}>
+              Login
+            </NavLink>
           </div>
         )}
       </header>

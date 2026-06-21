@@ -570,7 +570,7 @@ function DetailsStep({
           )
         }
       >
-        Use synthetic demo evidence
+        Use sample evidence
       </button>
 
       <label className="mt-5 flex items-start gap-3 text-sm text-[var(--ink-soft)]">

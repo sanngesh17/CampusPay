@@ -49,11 +49,11 @@ export function StatusScreen() {
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
               <div className="text-sm font-medium text-amber-800">Awaiting partner settlement</div>
               <p className="mt-1 text-xs text-amber-700">
-                In production the partner posts an HMAC-signed webhook. Simulate it for the demo:
+                In production the partner posts an HMAC-signed webhook. Simulate it here:
               </p>
               {settle.error ? <ErrorNote message={(settle.error as ApiError).message} /> : null}
               <Button className="mt-3" onClick={() => settle.mutate()} disabled={settle.isPending}>
-                {settle.isPending ? 'Settling…' : 'Confirm settlement (demo)'}
+                {settle.isPending ? 'Settling…' : 'Confirm settlement'}
               </Button>
             </div>
           ) : null}
